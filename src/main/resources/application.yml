@@ -1,0 +1,65 @@
+spring:
+  application:
+    name: bastion
+
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:bastion}
+    username: ${DB_USER:bastion}
+    password: ${DB_PASS:bastion}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+      connection-timeout: 10000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate   # Flyway owns the schema; Hibernate only checks it
+    open-in-view: false
+
+  flyway:
+    locations: classpath:db/migration
+
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USER:}
+    password: ${MAIL_PASS:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:false}
+          starttls:
+            enable: ${MAIL_STARTTLS:false}
+          # Jakarta Mail defaults all three to INFINITE — a relay that blackholes
+          # TCP would otherwise hang request threads until Tomcat runs dry.
+          connectiontimeout: ${MAIL_CONNECT_TIMEOUT_MS:10000}
+          timeout: ${MAIL_READ_TIMEOUT_MS:10000}
+          writetimeout: ${MAIL_WRITE_TIMEOUT_MS:10000}
+
+  task:
+    scheduling:
+      pool:
+        size: ${SCHEDULER_POOL_SIZE:4}
+
+app:
+  # REQUIRED — no default. Generate with: openssl rand -base64 32
+  jwt-secret: ${JWT_SECRET:}
+  access-token-minutes: ${ACCESS_TOKEN_MINUTES:15}
+  refresh-token-days: ${REFRESH_TOKEN_DAYS:30}
+  # Must match how you open the app in a browser — emailed links are built from it.
+  base-url: ${APP_BASE_URL:http://localhost:5173}
+  mail-from: ${MAIL_FROM:Bastion <no-reply@bastion.local>}
+  verification-token-hours: 24
+  reset-token-minutes: 30
+  security:
+    # Only enable behind a reverse proxy that RESETS X-Forwarded-For to the real
+    # client address. Trusting the header on a directly-exposed app lets callers
+    # spoof their own rate-limit key.
+    trust-forwarded-for: ${TRUST_FORWARDED_FOR:false}
+    cors-origins: ${CORS_ORIGINS:http://localhost:5173}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+logging:
+  level:
+    dev.bastion: INFO

@@ -1,0 +1,25 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:bastion;DB_CLOSE_DELAY=-1;MODE=MySQL
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  flyway:
+    enabled: false
+  mail:
+    host: localhost
+    port: 3025
+
+app:
+  security:
+    auth-requests-per-window: 10000
+  jwt-secret: dGVzdC1zZWNyZXQtbXVzdC1iZS0yNTYtYml0cy1sb25nISE=
+  access-token-minutes: 15
+  refresh-token-days: 30
+  base-url: http://localhost:5173
+  mail-from: Bastion Test <test@bastion.local>
+  verification-token-hours: 24
+  reset-token-minutes: 30

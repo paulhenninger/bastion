@@ -1,0 +1,61 @@
+# Dev stack: MySQL + Mailpit always; add the app + web images with
+#   docker compose --profile full up -d --build
+# For day-to-day development run only the databases here and use
+# `./gradlew bootRun` + `npm run dev` for hot reload.
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS:-bastion}
+      MYSQL_DATABASE: ${DB_NAME:-bastion}
+      MYSQL_USER: ${DB_USER:-bastion}
+      MYSQL_PASSWORD: ${DB_PASS:-bastion}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Local mail catcher — every email the app sends lands in the web UI at
+  # http://localhost:8025. Nothing leaves the machine.
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  app:
+    profiles: ["full"]
+    build: .
+    environment:
+      DB_HOST: mysql
+      DB_NAME: ${DB_NAME:-bastion}
+      DB_USER: ${DB_USER:-bastion}
+      DB_PASS: ${DB_PASS:-bastion}
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env — generate with: openssl rand -base64 32}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      MAIL_FROM: ${MAIL_FROM:-Bastion <no-reply@bastion.local>}
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  web:
+    profiles: ["full"]
+    build: ./frontend
+    ports:
+      - "8081:80"
+    depends_on:
+      - app
+
+volumes:
+  mysql-data:
