@@ -1,0 +1,48 @@
+version: 2
+
+updates:
+  # Backend — Spring Boot, Spring Security, JJWT, Flyway, MySQL driver
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      gradle-minor-and-patch:
+        update-types: [minor, patch]
+
+  # Frontend SPA — React, React Router, Vite, TypeScript
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+
+  # CI workflow actions (checkout, setup-java, setup-node, setup-gradle)
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Base images: eclipse-temurin (backend build + runtime)
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+
+  # Base images: node (SPA build) + nginx (SPA runtime)
+  - package-ecosystem: docker
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
