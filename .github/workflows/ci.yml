@@ -1,9 +1,20 @@
 name: CI
 
+# Note the push filter is scoped to the default branches. That matters: an
+# unscoped `push:` next to `pull_request:` fires BOTH events on a branch with an
+# open PR and runs the whole suite twice on the identical commit. Actions also
+# bills per job rounded UP to the whole minute, so keep jobs few rather than
+# small — this repo is public (minutes are free), but anyone using the starter
+# in a private repo pays for both mistakes.
 on:
   push:
     branches: [master, main]
   pull_request:
+
+# Cancel superseded PR runs; never cancel a default-branch run halfway.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   backend:
