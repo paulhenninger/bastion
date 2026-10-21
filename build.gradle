@@ -1,6 +1,6 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '4.1.0'
+    id 'org.springframework.boot' version '4.1.1'
     id 'io.spring.dependency-management' version '1.1.7'
     // Static analysis on the compiled bytecode, with find-sec-bugs for the
     // security rules. Advisory: it reports in CI and never fails the build.
