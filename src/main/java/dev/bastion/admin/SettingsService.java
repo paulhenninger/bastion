@@ -42,6 +42,6 @@ public class SettingsService {
         setting.value = String.valueOf(open);
         setting.updatedAt = Instant.now();
         repository.save(setting);
-        events.record(open ? SecurityEventType.SIGNUPS_OPENED : SecurityEventType.SIGNUPS_CLOSED, null, admin, null);
+        events.add(open ? SecurityEventType.SIGNUPS_OPENED : SecurityEventType.SIGNUPS_CLOSED, null, admin, null);
     }
 }

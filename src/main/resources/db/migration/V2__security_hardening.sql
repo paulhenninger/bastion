@@ -57,8 +57,9 @@ CREATE INDEX ix_user_sessions_user ON user_sessions (user_id, revoked_at);
 CREATE INDEX ix_user_sessions_expires ON user_sessions (expires_at);
 
 -- Existing refresh tokens predate session tracking and cannot be attached to a
--- session; everyone signs in once more after this upgrade.
-DELETE FROM refresh_tokens;
+-- session; everyone signs in once more after this upgrade. (The condition is
+-- every row: ids start at 1.)
+DELETE FROM refresh_tokens WHERE id > 0;
 
 ALTER TABLE refresh_tokens
     MODIFY expires_at DATETIME(6) NOT NULL,

@@ -38,6 +38,8 @@ import java.util.Map;
 @Service
 public class AccountService {
 
+    private static final String CREATED_AT = "createdAt";
+
     private final UserRepository users;
     private final PasswordResetTokenRepository resetTokens;
     private final EmailChangeTokenRepository emailChangeTokens;
@@ -99,7 +101,7 @@ public class AccountService {
         });
         sessions.revokeOthers(me.userId(), me.sessionId());
         mfa.invalidateChallenges(me.userId());
-        events.record(SecurityEventType.PASSWORD_CHANGED, user);
+        events.add(SecurityEventType.PASSWORD_CHANGED, user);
         email.sendSecurityNotice(user.getEmail(), "Your password was changed",
                 "The password for your account was just changed, and your other devices were signed out.");
     }
@@ -112,7 +114,7 @@ public class AccountService {
     public void requestEmailChange(AuthPrincipal me, String rawNewEmail) {
         reauth.require(me);
         String newAddress = EmailAddress.normalize(rawNewEmail);
-        if (newAddress.equals(me.email())) {
+        if (me.email().equals(newAddress)) {
             throw ApiException.badRequest("That's already your email address");
         }
         String problem = deliverability.problem(newAddress);
@@ -121,7 +123,7 @@ public class AccountService {
         }
         tx.executeWithoutResult(status -> {
             User user = users.findById(me.userId()).orElseThrow();
-            events.record(SecurityEventType.EMAIL_CHANGE_REQUESTED, user, "to " + newAddress);
+            events.add(SecurityEventType.EMAIL_CHANGE_REQUESTED, user, "to " + newAddress);
             if (users.existsByEmail(newAddress)) {
                 return;
             }
@@ -150,7 +152,7 @@ public class AccountService {
                 throw ApiException.badRequest(
                         "You're the only administrator. Make someone else an administrator first.");
             }
-            events.record(SecurityEventType.ACCOUNT_DELETED, user, "by its owner");
+            events.add(SecurityEventType.ACCOUNT_DELETED, user, "by its owner");
             users.delete(user);
         });
         email.sendSecurityNotice(me.email(), "Your account was deleted",
@@ -171,19 +173,19 @@ public class AccountService {
                 "email", user.getEmail(),
                 "name", user.getName() == null ? "" : user.getName(),
                 "role", user.getRole().name(),
-                "createdAt", user.getCreatedAt(),
+                CREATED_AT, user.getCreatedAt(),
                 "lastLoginAt", String.valueOf(user.getLastLoginAt()),
                 "passwordChangedAt", String.valueOf(user.getPasswordChangedAt()),
                 "twoFactorEnabled", user.isTotpEnabled()));
         out.put("sessions", sessions.active(me.userId()).stream().map(s -> Map.of(
-                "createdAt", s.getCreatedAt(),
+                CREATED_AT, s.getCreatedAt(),
                 "lastSeenAt", s.getLastSeenAt(),
                 "ip", String.valueOf(s.getIp()),
                 "userAgent", String.valueOf(s.getUserAgent()),
                 "method", s.getAuthMethod().name())).toList());
         out.put("passkeys", passkeys.list(me.userId()).stream().map(p -> Map.of(
                 "label", p.getLabel(),
-                "createdAt", p.getCreatedAt(),
+                CREATED_AT, p.getCreatedAt(),
                 "lastUsedAt", String.valueOf(p.getLastUsedAt()))).toList());
         List<SecurityEvent> history = eventRepository.findByUserIdOrderByOccurredAtDescIdDesc(me.userId());
         out.put("securityEvents", history.stream().map(e -> Map.of(
@@ -191,7 +193,7 @@ public class AccountService {
                 "type", e.getType().name(),
                 "ip", String.valueOf(e.getIp()),
                 "detail", String.valueOf(e.getDetail()))).toList());
-        events.record(SecurityEventType.ACCOUNT_EXPORTED, user);
+        events.add(SecurityEventType.ACCOUNT_EXPORTED, user);
         return out;
     }
 }

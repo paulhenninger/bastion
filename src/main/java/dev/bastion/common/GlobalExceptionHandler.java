@@ -29,12 +29,14 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final String MESSAGE = "message";
+
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<Map<String, Object>> apiException(ApiException e) {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("message", e.getMessage());
+        body.put(MESSAGE, e.getMessage());
         if (e.getCode() != null) {
             body.put("code", e.getCode());
         }
@@ -47,20 +49,20 @@ public class GlobalExceptionHandler {
         e.getBindingResult().getFieldErrors().forEach(f ->
                 fields.putIfAbsent(f.getField(), f.getDefaultMessage()));
         return ResponseEntity.badRequest().body(Map.of(
-                "message", fields.isEmpty() ? "Validation failed" : fields.values().iterator().next(),
+                MESSAGE, fields.isEmpty() ? "Validation failed" : fields.values().iterator().next(),
                 "fields", fields));
     }
 
     @ExceptionHandler({HandlerMethodValidationException.class, ConstraintViolationException.class,
             MethodArgumentTypeMismatchException.class})
     public ResponseEntity<Map<String, Object>> invalidParameter(Exception e) {
-        return ResponseEntity.badRequest().body(Map.of("message", "Invalid request parameters"));
+        return ResponseEntity.badRequest().body(Map.of(MESSAGE, "Invalid request parameters"));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Map<String, Object>> unreadable(HttpMessageNotReadableException e) {
         // Also where an over-limit body lands (RequestBodyLimitFilter fails the stream).
-        return ResponseEntity.badRequest().body(Map.of("message", "Malformed or oversized request body"));
+        return ResponseEntity.badRequest().body(Map.of(MESSAGE, "Malformed or oversized request body"));
     }
 
     @ExceptionHandler(Exception.class)
@@ -72,12 +74,12 @@ public class GlobalExceptionHandler {
             if (status.is4xxClientError()) {
                 HttpStatus resolved = HttpStatus.resolve(status.value());
                 String reason = resolved == null ? "Request rejected" : resolved.getReasonPhrase();
-                return ResponseEntity.status(status).body(Map.of("message", reason));
+                return ResponseEntity.status(status).body(Map.of(MESSAGE, reason));
             }
         }
         // Never leak internals to the client; the log line has the detail.
         log.error("Unhandled exception", e);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("message", "Something went wrong"));
+                .body(Map.of(MESSAGE, "Something went wrong"));
     }
 }

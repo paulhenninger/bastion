@@ -51,18 +51,18 @@ public class SecurityEvents {
     }
 
     /** Something that happened to {@code user}'s account, done by its owner. */
-    public void record(SecurityEventType type, User user) {
-        record(type, user, null, null);
+    public void add(SecurityEventType type, User user) {
+        add(type, user, null, null);
     }
 
-    public void record(SecurityEventType type, User user, String detail) {
-        record(type, user, null, detail);
+    public void add(SecurityEventType type, User user, String detail) {
+        add(type, user, null, detail);
     }
 
     /** @param actor who did it, when that isn't the account's owner (an administrator) */
-    public void record(SecurityEventType type, User user, User actor, String detail) {
+    public void add(SecurityEventType type, User user, User actor, String detail) {
         try {
-            record(type, user == null ? null : user.getId(), user == null ? null : user.getEmail(),
+            add(type, user == null ? null : user.getId(), user == null ? null : user.getEmail(),
                     actor == null ? null : actor.getId(), detail);
         } catch (RuntimeException e) {
             // e.g. a detached lazy proxy: the log must never fail the action it describes.
@@ -71,11 +71,11 @@ public class SecurityEvents {
     }
 
     /** For events with no account behind them (a failed sign-in for an unknown address). */
-    public void recordForEmail(SecurityEventType type, String typedEmail, String detail) {
-        record(type, null, typedEmail, null, detail);
+    public void addForEmail(SecurityEventType type, String typedEmail, String detail) {
+        add(type, null, typedEmail, null, detail);
     }
 
-    private void record(SecurityEventType type, Long userId, String email, Long actorId, String detail) {
+    private void add(SecurityEventType type, Long userId, String email, Long actorId, String detail) {
         try {
             // Read here, on the request thread: the writer runs on another one.
             ClientInfo client = ClientInfo.current();

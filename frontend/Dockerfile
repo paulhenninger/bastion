@@ -1,5 +1,5 @@
 # Build the SPA, serve it with an unprivileged nginx (which also proxies /api).
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /workspace
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts

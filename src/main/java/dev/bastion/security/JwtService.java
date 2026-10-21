@@ -90,7 +90,7 @@ public class JwtService {
                 return Optional.empty();
             }
             return Optional.of(new AccessClaims(Long.parseLong(claims.getSubject()), sid));
-        } catch (JwtException | IllegalArgumentException e) {
+        } catch (JwtException | IllegalArgumentException _) {
             return Optional.empty();
         }
     }

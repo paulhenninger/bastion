@@ -79,6 +79,8 @@ public class PasskeyService {
     private static final int MAX_PER_USER = 20;
     private static final long TIMEOUT_MS = 300_000;
     private static final String FAILED = "Passkey sign-in could not be verified";
+    private static final String CHALLENGE = "challenge";
+    private static final String REQUIRED = "required";
 
     /** ES256, EdDSA, RS256 — the set every platform authenticator covers. */
     private static final List<PublicKeyCredentialParameters> ALGORITHMS = List.of(
@@ -134,7 +136,7 @@ public class PasskeyService {
         String challenge = newChallenge(Purpose.REGISTRATION, user);
 
         Map<String, Object> options = new LinkedHashMap<>();
-        options.put("challenge", challenge);
+        options.put(CHALLENGE, challenge);
         options.put("rp", Map.of("id", rpId, "name", appName));
         options.put("user", Map.of(
                 "id", user.getWebauthnUserHandle(),
@@ -148,9 +150,9 @@ public class PasskeyService {
         options.put("excludeCredentials", credentials.findByUserIdOrderByCreatedAtAsc(userId).stream()
                 .map(PasskeyService::descriptor).toList());
         options.put("authenticatorSelection", Map.of(
-                "residentKey", "required",
+                "residentKey", REQUIRED,
                 "requireResidentKey", true,
-                "userVerification", "required"));
+                "userVerification", REQUIRED));
         return options;
     }
 
@@ -201,7 +203,7 @@ public class PasskeyService {
         credentials.save(credential);
 
         User owner = users.findById(userId).orElseThrow();
-        events.record(SecurityEventType.PASSKEY_ADDED, owner, credential.getLabel());
+        events.add(SecurityEventType.PASSKEY_ADDED, owner, credential.getLabel());
         email.sendSecurityNotice(owner.getEmail(), "A passkey was added",
                 "A passkey (\"" + credential.getLabel() + "\") was added to your account. It can sign in "
                         + "without your password.");
@@ -227,7 +229,7 @@ public class PasskeyService {
                 .orElseThrow(() -> ApiException.notFound("Passkey not found"));
         credentials.delete(credential);
         User owner = users.findById(userId).orElseThrow();
-        events.record(SecurityEventType.PASSKEY_REMOVED, owner, credential.getLabel());
+        events.add(SecurityEventType.PASSKEY_REMOVED, owner, credential.getLabel());
         email.sendSecurityNotice(owner.getEmail(), "A passkey was removed",
                 "The passkey \"" + credential.getLabel() + "\" was removed from your account.");
     }
@@ -250,7 +252,7 @@ public class PasskeyService {
         PasskeyCredential credential = verifyAssertion(ch, assertion);
         User user = credential.getUser();
         if (!user.isEnabled() || user.isLocked()) {
-            events.record(SecurityEventType.SIGN_IN_REFUSED, user, user.isLocked() ? "account locked" : "not verified");
+            events.add(SecurityEventType.SIGN_IN_REFUSED, user, user.isLocked() ? "account locked" : "not verified");
             throw new ApiException(HttpStatus.UNAUTHORIZED, FAILED);
         }
         return user;
@@ -298,7 +300,7 @@ public class PasskeyService {
         }
         AuthenticationData data;
         try {
-            CredentialRecordImpl record = new CredentialRecordImpl(new NoneAttestationStatement(),
+            CredentialRecordImpl stored = new CredentialRecordImpl(new NoneAttestationStatement(),
                     credential.isUvInitialized(), credential.isBackupEligible(), credential.isBackedUp(),
                     credential.getSignCount(),
                     credentialDataConverter.convert(credential.getAttestedCredentialData()),
@@ -308,10 +310,10 @@ public class PasskeyService {
                             blankToNull(assertion.userHandle()) == null ? null : decode(assertion.userHandle()),
                             decode(assertion.authenticatorData()), decode(assertion.clientDataJson()),
                             decode(assertion.signature())),
-                    new AuthenticationParameters(serverProperty(ch.getChallenge()), record, null, true, true));
+                    new AuthenticationParameters(serverProperty(ch.getChallenge()), stored, null, true, true));
         } catch (Exception e) {
             log.info("Passkey assertion rejected for user {}: {}", user.getId(), e.toString());
-            events.record(SecurityEventType.PASSKEY_SIGN_IN_FAILED, user, e.getClass().getSimpleName());
+            events.add(SecurityEventType.PASSKEY_SIGN_IN_FAILED, user, e.getClass().getSimpleName());
             throw new ApiException(HttpStatus.UNAUTHORIZED, FAILED);
         }
         AuthenticatorData<?> authData = data.getAuthenticatorData();
@@ -334,10 +336,10 @@ public class PasskeyService {
 
     private Map<String, Object> requestOptions(String challenge, List<Map<String, Object>> allow) {
         Map<String, Object> options = new LinkedHashMap<>();
-        options.put("challenge", challenge);
+        options.put(CHALLENGE, challenge);
         options.put("rpId", rpId);
         options.put("timeout", TIMEOUT_MS);
-        options.put("userVerification", "required");
+        options.put("userVerification", REQUIRED);
         options.put("allowCredentials", allow);
         return options;
     }
@@ -355,9 +357,9 @@ public class PasskeyService {
     private PasskeyChallenge consumeChallenge(String clientDataJson, Purpose purpose) {
         String value;
         try {
-            JsonNode node = json.readTree(new String(decode(clientDataJson), StandardCharsets.UTF_8)).get("challenge");
+            JsonNode node = json.readTree(new String(decode(clientDataJson), StandardCharsets.UTF_8)).get(CHALLENGE);
             value = node == null ? null : node.asString();
-        } catch (Exception e) {
+        } catch (Exception _) {
             value = null;
         }
         PasskeyChallenge ch = value == null ? null : challenges.findByChallenge(value)
@@ -418,7 +420,7 @@ public class PasskeyService {
         }
         try {
             return Base64.getUrlDecoder().decode(base64url);
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException _) {
             throw ApiException.badRequest("Malformed passkey response");
         }
     }

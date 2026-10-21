@@ -57,7 +57,7 @@ public class ReauthService {
     public void withPassword(AuthPrincipal me, String password, String code) {
         verifyIdentity(me.userId(), password, code);
         sessions.markReauthenticated(me.sessionId());
-        events.record(SecurityEventType.REAUTHENTICATED, users.getReferenceById(me.userId()), "password");
+        events.add(SecurityEventType.REAUTHENTICATED, users.getReferenceById(me.userId()), "password");
     }
 
     /**
@@ -71,11 +71,11 @@ public class ReauthService {
         attempts.acquire(budget);
         User user = users.findByIdForUpdate(userId).orElseThrow();
         if (password == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
-            events.record(SecurityEventType.REAUTH_FAILED, user, "wrong password");
+            events.add(SecurityEventType.REAUTH_FAILED, user, "wrong password");
             throw ApiException.badRequest("Password is incorrect");
         }
         if (user.isTotpEnabled() && mfa.verifyFactor(user, code) == null) {
-            events.record(SecurityEventType.REAUTH_FAILED, user, "wrong code");
+            events.add(SecurityEventType.REAUTH_FAILED, user, "wrong code");
             throw ApiException.badRequest(code == null || code.isBlank()
                     ? "Enter a code from your authenticator app (or a recovery code)"
                     : "That code didn't work");

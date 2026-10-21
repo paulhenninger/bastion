@@ -61,6 +61,6 @@ public class BootstrapAdmin {
         user.setRole(Role.ADMIN);
         users.save(user);
         log.warn("Promoted bootstrap administrator (user {})", user.getId());
-        events.record(SecurityEventType.ADMIN_BOOTSTRAPPED, user);
+        events.add(SecurityEventType.ADMIN_BOOTSTRAPPED, user);
     }
 }

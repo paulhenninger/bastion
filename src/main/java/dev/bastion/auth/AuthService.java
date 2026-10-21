@@ -135,7 +135,7 @@ public class AuthService {
                 // Reply exactly as for a new signup; tell the real owner out of band.
                 // Nothing about the existing account is touched.
                 email.sendExistingAccountNotice(address);
-                events.record(SecurityEventType.SIGN_UP_EXISTING_ACCOUNT, existing.get());
+                events.add(SecurityEventType.SIGN_UP_EXISTING_ACCOUNT, existing.get());
                 return;
             }
             User user = existing.orElseGet(() -> {
@@ -159,7 +159,7 @@ public class AuthService {
             token.setExpiresAt(now.plus(Duration.ofHours(props.verificationTokenHours())));
             verificationTokens.save(token);
             email.sendVerificationEmail(address, raw);
-            events.record(SecurityEventType.SIGN_UP, user);
+            events.add(SecurityEventType.SIGN_UP, user);
         });
     }
 
@@ -207,7 +207,7 @@ public class AuthService {
             managed.setPasswordChangedAt(now);
             managed.setEnabled(true);
             bootstrapAdmin.promoteIfEligible(managed);
-            events.record(SecurityEventType.EMAIL_VERIFIED, managed);
+            events.add(SecurityEventType.EMAIL_VERIFIED, managed);
             return managed;
         });
         return sessions.start(verified, AuthMethod.EMAIL_VERIFICATION, client);
@@ -222,7 +222,7 @@ public class AuthService {
     public LoginResult login(String rawEmail, String password, ClientInfo client) {
         String address = EmailAddress.normalize(rawEmail);
         if (!loginThrottle.tryAcquire(address)) {
-            events.recordForEmail(SecurityEventType.SIGN_IN_BLOCKED, address, "too many attempts");
+            events.addForEmail(SecurityEventType.SIGN_IN_BLOCKED, address, "too many attempts");
             throw ApiException.tooManyRequests("Too many sign-in attempts. Wait 15 minutes and try again.");
         }
         Optional<User> found = users.findByEmail(address);
@@ -232,9 +232,9 @@ public class AuthService {
 
         if (found.isEmpty() || !passwordOk) {
             if (found.isPresent()) {
-                events.record(SecurityEventType.SIGN_IN_FAILED, found.get(), "wrong password");
+                events.add(SecurityEventType.SIGN_IN_FAILED, found.get(), "wrong password");
             } else {
-                events.recordForEmail(SecurityEventType.SIGN_IN_FAILED, address, "unknown address");
+                events.addForEmail(SecurityEventType.SIGN_IN_FAILED, address, "unknown address");
             }
             throw new ApiException(HttpStatus.UNAUTHORIZED, INVALID_CREDENTIALS);
         }
@@ -242,13 +242,13 @@ public class AuthService {
         // These run AFTER the password check on purpose: failing earlier would confirm
         // the account exists to someone who hasn't proven they own it.
         if (!user.isEnabled()) {
-            events.record(SecurityEventType.SIGN_IN_REFUSED, user, "email not verified");
+            events.add(SecurityEventType.SIGN_IN_REFUSED, user, "email not verified");
             throw new ApiException(HttpStatus.FORBIDDEN,
                     "Email address not verified. Check your inbox or request a new link.",
                     ApiException.EMAIL_NOT_VERIFIED);
         }
         if (user.isLocked()) {
-            events.record(SecurityEventType.SIGN_IN_REFUSED, user, "account locked");
+            events.add(SecurityEventType.SIGN_IN_REFUSED, user, "account locked");
             throw new ApiException(HttpStatus.FORBIDDEN, "This account has been locked. Contact support.",
                     ApiException.ACCOUNT_LOCKED);
         }
@@ -299,7 +299,7 @@ public class AuthService {
         String address = EmailAddress.normalize(rawEmail);
         // Recorded whether or not the address has an account: a run of these across
         // many addresses is itself the thing worth seeing.
-        events.recordForEmail(SecurityEventType.PASSWORD_RESET_REQUESTED, address, null);
+        events.addForEmail(SecurityEventType.PASSWORD_RESET_REQUESTED, address, null);
         // Captured here: the mailer runs on another thread, where the request is gone.
         recoveryMailer.sendPasswordReset(address, ClientInfo.current());
     }
@@ -330,7 +330,7 @@ public class AuthService {
         });
         sessions.revokeAll(userId);
         mfa.invalidateChallenges(userId);
-        events.record(SecurityEventType.PASSWORD_RESET, user);
+        events.add(SecurityEventType.PASSWORD_RESET, user);
         email.sendSecurityNotice(user.getEmail(), "Your password was reset",
                 "The password for your account was just reset using a link sent to this address, "
                         + "and every device was signed out.");
@@ -360,7 +360,7 @@ public class AuthService {
             User managed = users.findByIdForUpdate(userId).orElseThrow();
             String old = managed.getEmail();
             managed.setEmail(newAddress);
-            events.record(SecurityEventType.EMAIL_CHANGED, managed, "from " + old);
+            events.add(SecurityEventType.EMAIL_CHANGED, managed, "from " + old);
             return old;
         });
         // The sign-in identifier changed: every session signs in again with it.

@@ -101,7 +101,7 @@ public class SessionService {
         managed.setLastLoginAt(now);
 
         String raw = mintRefreshToken(session, managed, now);
-        events.record(SecurityEventType.SIGN_IN, managed, method.name());
+        events.add(SecurityEventType.SIGN_IN, managed, method.name());
         alertIfNewDevice(managed, session, previousSignIn, now);
         return new Issued(jwt.issueAccessToken(managed.getId(), session.getPublicId()), raw, session, managed);
     }
@@ -128,7 +128,7 @@ public class SessionService {
                 // session. We can't tell which is the owner, so everyone signs in again.
                 log.warn("Refresh token reuse detected for user {} — revoking all sessions", user.getId());
                 revokeEverything(user.getId(), now);
-                events.record(SecurityEventType.REFRESH_TOKEN_REUSE, user);
+                events.add(SecurityEventType.REFRESH_TOKEN_REUSE, user);
                 email.sendSecurityNotice(user.getEmail(), "Suspicious session activity",
                         "A sign-in token for your account was used twice, which can mean it was copied. "
                                 + "As a precaution every device has been signed out. If you don't recognise "
@@ -155,7 +155,7 @@ public class SessionService {
             UserSession session = token.getSession();
             if (session.getRevokedAt() == null) {
                 revoke(session, Instant.now());
-                events.record(SecurityEventType.SIGN_OUT, token.getUser());
+                events.add(SecurityEventType.SIGN_OUT, token.getUser());
             }
         });
     }
@@ -281,7 +281,7 @@ public class SessionService {
         boolean known = sessions.seenBefore(user.getId(), session.getId(), now.minus(DEVICE_MEMORY),
                 session.getIp(), session.getUserAgent());
         if (!known) {
-            events.record(SecurityEventType.NEW_DEVICE_SIGN_IN, user, session.getUserAgent());
+            events.add(SecurityEventType.NEW_DEVICE_SIGN_IN, user, session.getUserAgent());
             email.sendNewSignInAlert(user.getEmail(), session.getIp(), session.getUserAgent(), now);
         }
     }

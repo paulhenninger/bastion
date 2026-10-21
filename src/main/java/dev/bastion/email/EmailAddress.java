@@ -88,21 +88,30 @@ public final class EmailAddress {
             return "The email domain must include a top-level domain, e.g. example.com";
         }
         for (String label : labels) {
-            if (label.isEmpty() || label.length() > MAX_LABEL_LENGTH
-                    || label.startsWith("-") || label.endsWith("-")) {
-                return "The email domain is malformed";
-            }
-            for (int i = 0; i < label.length(); i++) {
-                char c = label.charAt(i);
-                if (c != '-' && !isAsciiLetterOrDigit(c)) {
-                    return "The email domain contains an unsupported character";
-                }
+            String problem = labelProblem(label);
+            if (problem != null) {
+                return problem;
             }
         }
         String tld = labels[labels.length - 1].toLowerCase(Locale.ROOT);
         boolean punycode = tld.startsWith("xn--") && tld.length() > 4;
         if (!punycode && (tld.length() < 2 || !tld.chars().allMatch(c -> c >= 'a' && c <= 'z'))) {
             return "The email domain's top-level domain doesn't look right";
+        }
+        return null;
+    }
+
+    /** One dot-separated part of the domain: LDH characters, no leading or trailing hyphen. */
+    private static String labelProblem(String label) {
+        if (label.isEmpty() || label.length() > MAX_LABEL_LENGTH
+                || label.startsWith("-") || label.endsWith("-")) {
+            return "The email domain is malformed";
+        }
+        for (int i = 0; i < label.length(); i++) {
+            char c = label.charAt(i);
+            if (c != '-' && !isAsciiLetterOrDigit(c)) {
+                return "The email domain contains an unsupported character";
+            }
         }
         return null;
     }

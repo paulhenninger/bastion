@@ -74,7 +74,7 @@ public class TurnstileVerifier {
                 log.info("Turnstile challenge rejected: {}", body.path("error-codes"));
             }
             return ok;
-        } catch (InterruptedException e) {
+        } catch (InterruptedException _) {
             Thread.currentThread().interrupt();
             return true;
         } catch (Exception e) {

@@ -58,14 +58,14 @@ public class SessionController {
         if (publicId.length() > 64 || !sessions.revoke(me.userId(), publicId)) {
             throw ApiException.notFound("Session not found");
         }
-        events.record(SecurityEventType.SESSION_REVOKED, user(me));
+        events.add(SecurityEventType.SESSION_REVOKED, user(me));
         return Map.of("revoked", 1);
     }
 
     @PostMapping("/sessions/revoke-others")
     public Map<String, Object> revokeOthers(@AuthenticationPrincipal AuthPrincipal me) {
         int ended = sessions.revokeOthers(me.userId(), me.sessionId());
-        events.record(SecurityEventType.OTHER_SESSIONS_REVOKED, user(me), ended + " ended");
+        events.add(SecurityEventType.OTHER_SESSIONS_REVOKED, user(me), ended + " ended");
         return Map.of("revoked", ended);
     }
 
@@ -97,7 +97,7 @@ public class SessionController {
                                                  @Valid @RequestBody AssertionRequest request) {
         passkeys.reauthenticate(me.userId(), request.toAssertion());
         sessions.markReauthenticated(me.sessionId());
-        events.record(SecurityEventType.REAUTHENTICATED, user(me), "passkey");
+        events.add(SecurityEventType.REAUTHENTICATED, user(me), "passkey");
         return Map.of("reauthenticated", true);
     }
 

@@ -126,7 +126,7 @@ public class MfaService {
             if (ch.getAttempts() >= MAX_CHALLENGE_ATTEMPTS) {
                 ch.setUsedAt(now);
             }
-            events.record(SecurityEventType.MFA_FAILED, user, "at sign-in");
+            events.add(SecurityEventType.MFA_FAILED, user, "at sign-in");
             throw new ApiException(HttpStatus.UNAUTHORIZED, "That code didn't work. Check your authenticator and try again.");
         }
         attempts.clear(budget);
@@ -189,7 +189,7 @@ public class MfaService {
         user.setTotpPendingSecret(null);
         user.setTotpLastStep(step.getAsLong());
         List<String> codes = replaceRecoveryCodes(user);
-        events.record(SecurityEventType.MFA_ENABLED, user);
+        events.add(SecurityEventType.MFA_ENABLED, user);
         email.sendSecurityNotice(user.getEmail(), "Two-factor authentication turned on",
                 "Two-factor authentication with an authenticator app was turned on for your account.");
         return codes;
@@ -203,7 +203,7 @@ public class MfaService {
             return;
         }
         clearTotp(user);
-        events.record(SecurityEventType.MFA_DISABLED, user);
+        events.add(SecurityEventType.MFA_DISABLED, user);
         email.sendSecurityNotice(user.getEmail(), "Two-factor authentication turned off",
                 "Two-factor authentication was turned off for your account. Your account is now "
                         + "protected by your password alone.");
@@ -216,7 +216,7 @@ public class MfaService {
             throw ApiException.badRequest("Turn on two-factor authentication first");
         }
         List<String> codes = replaceRecoveryCodes(user);
-        events.record(SecurityEventType.RECOVERY_CODES_REGENERATED, user);
+        events.add(SecurityEventType.RECOVERY_CODES_REGENERATED, user);
         email.sendSecurityNotice(user.getEmail(), "New recovery codes",
                 "New two-factor recovery codes were generated for your account. The old ones no longer work.");
         return codes;
@@ -227,7 +227,7 @@ public class MfaService {
     public void adminReset(Long userId, User admin) {
         User user = users.findByIdForUpdate(userId).orElseThrow();
         clearTotp(user);
-        events.record(SecurityEventType.ADMIN_RESET_MFA, user, admin, null);
+        events.add(SecurityEventType.ADMIN_RESET_MFA, user, admin, null);
         email.sendSecurityNotice(user.getEmail(), "Two-factor authentication reset",
                 "An administrator turned off two-factor authentication on your account. "
                         + "Sign in and set it up again.");
@@ -262,7 +262,7 @@ public class MfaService {
         if (normalized.length() == RECOVERY_CODE_LENGTH
                 && recoveryCodes.consume(user.getId(), Tokens.sha256(normalized), Instant.now()) == 1) {
             long left = recoveryCodes.countUnused(user.getId());
-            events.record(SecurityEventType.RECOVERY_CODE_USED, user, left + " left");
+            events.add(SecurityEventType.RECOVERY_CODE_USED, user, left + " left");
             email.sendSecurityNotice(user.getEmail(), "A recovery code was used",
                     "One of your two-factor recovery codes was just used to sign in. You have " + left
                             + " left. If this wasn't you, change your password and generate new codes now.");

@@ -54,6 +54,8 @@ public class SecurityEvent {
     protected SecurityEvent() {
     }
 
+    // One argument per column of an immutable row; a builder would add nothing.
+    @SuppressWarnings("java:S107")
     SecurityEvent(Instant occurredAt, SecurityEventType type, Long userId, String subjectEmail,
                   Long actorUserId, String ip, String userAgent, String detail) {
         this.occurredAt = occurredAt;

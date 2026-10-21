@@ -85,7 +85,14 @@ public class TotpService {
         return matched;
     }
 
-    /** RFC 4226 HOTP for one counter value. Package-private for the RFC test vectors. */
+    /**
+     * RFC 4226 HOTP for one counter value. Package-private for the RFC test vectors.
+     *
+     * <p>HMAC-SHA1 is what RFC 6238 specifies and what authenticator apps implement
+     * (several ignore the {@code algorithm} parameter). HMAC's security doesn't rest on
+     * SHA-1's collision resistance, which is the part that's broken.
+     */
+    @SuppressWarnings("java:S4790")
     String codeAt(String secret, long counter) {
         byte[] message = new byte[8];
         long value = counter;

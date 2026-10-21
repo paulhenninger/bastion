@@ -83,7 +83,7 @@ public class AdminController {
     public PagedResponse<AdminUserRow> list(@RequestParam(defaultValue = "0") int page,
                                             @RequestParam(defaultValue = "20") int size,
                                             @RequestParam(defaultValue = "") String q) {
-        PageRequest pageable = PageRequest.of(Math.max(0, Math.min(page, 10_000)), Math.max(1, Math.min(size, 100)),
+        PageRequest pageable = PageRequest.of(Math.clamp(page, 0, 10_000), Math.clamp(size, 1, 100),
                 Sort.by(Sort.Direction.DESC, "createdAt"));
         String query = q.strip();
         if (query.length() > 100) {
@@ -114,7 +114,7 @@ public class AdminController {
             return AdminUserRow.from(target);
         }
         target.setRole(request.role());
-        events.record(SecurityEventType.ADMIN_ROLE_CHANGED, target, actor(admin), "now " + request.role());
+        events.add(SecurityEventType.ADMIN_ROLE_CHANGED, target, actor(admin), "now " + request.role());
         email.sendSecurityNotice(target.getEmail(), "Your account role changed",
                 request.role() == Role.ADMIN
                         ? "An administrator gave your account administrator access."
@@ -135,7 +135,7 @@ public class AdminController {
             // A lock must not be outlived by an active session.
             sessions.revokeAll(target.getId());
         }
-        events.record(locked ? SecurityEventType.ADMIN_LOCKED : SecurityEventType.ADMIN_UNLOCKED,
+        events.add(locked ? SecurityEventType.ADMIN_LOCKED : SecurityEventType.ADMIN_UNLOCKED,
                 target, actor(admin), null);
         return AdminUserRow.from(target);
     }
@@ -145,7 +145,7 @@ public class AdminController {
     public MessageResponse revokeSessions(@AuthenticationPrincipal AuthPrincipal admin, @PathVariable Long id) {
         User target = requireOther(admin, id);
         sessions.revokeAll(target.getId());
-        events.record(SecurityEventType.ADMIN_REVOKED_SESSIONS, target, actor(admin), null);
+        events.add(SecurityEventType.ADMIN_REVOKED_SESSIONS, target, actor(admin), null);
         return new MessageResponse("Signed out everywhere");
     }
 
@@ -164,7 +164,7 @@ public class AdminController {
     public MessageResponse delete(@AuthenticationPrincipal AuthPrincipal admin, @PathVariable Long id) {
         reauth.require(admin);
         User target = requireOther(admin, id);
-        events.record(SecurityEventType.ADMIN_DELETED_ACCOUNT, target, actor(admin), null);
+        events.add(SecurityEventType.ADMIN_DELETED_ACCOUNT, target, actor(admin), null);
         users.delete(target);
         return new MessageResponse("Account deleted");
     }
@@ -181,7 +181,7 @@ public class AdminController {
         if ((email != null && email.length() > 254) || (ip != null && ip.length() > 45)) {
             throw ApiException.badRequest("Filter is too long");
         }
-        PageRequest pageable = PageRequest.of(Math.max(0, Math.min(page, 10_000)), Math.max(1, Math.min(size, 200)));
+        PageRequest pageable = PageRequest.of(Math.clamp(page, 0, 10_000), Math.clamp(size, 1, 200));
         return PagedResponse.of(eventRepository.search(userId, blankToNull(email, true), blankToNull(ip, false),
                 type, pageable).map(EventRow::from));
     }

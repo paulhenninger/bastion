@@ -105,13 +105,13 @@ public class EmailDeliverability {
                 }
             }
             return false;
-        } catch (NamingException e) {
+        } catch (NamingException _) {
             return true;
         } finally {
             if (ctx != null) {
                 try {
                     ctx.close();
-                } catch (NamingException ignored) {
+                } catch (NamingException _) {
                     // nothing to flush
                 }
             }
@@ -124,9 +124,9 @@ public class EmailDeliverability {
         try {
             Attribute attr = ctx.getAttributes(domain, new String[]{type}).get(type);
             return attr != null && attr.size() > 0 ? Answer.FOUND : Answer.ABSENT;
-        } catch (NameNotFoundException e) {
+        } catch (NameNotFoundException _) {
             return Answer.ABSENT; // authoritative: the domain doesn't exist
-        } catch (NamingException e) {
+        } catch (NamingException _) {
             return Answer.UNKNOWN;
         }
     }
