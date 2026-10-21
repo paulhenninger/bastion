@@ -45,7 +45,8 @@ Every response carries an `X-Request-Id`; quote it when reporting a problem.
 | POST | `/auth/reset-password` | `{token, newPassword}` | Ends every session; does not sign in |
 | POST | `/auth/confirm-email-change` | `{token}` | Ends every session |
 
-¹ **Session** = `Set-Cookie: bastion_refresh=…; HttpOnly; SameSite=Strict; Path=/api/v1/auth` and
+¹ **Session** = `Set-Cookie: bastion_refresh=…; HttpOnly; SameSite=Strict; Path=/api/v1/auth` (sign-ins also set a
+`bastion_device` cookie, same flags, 1 year: it marks the browser as known for sign-in throttling and grants nothing else) and
 `{accessToken, expiresIn, user: {id, email, name, role, mfaEnabled}, passwordBreached?}`.
 `passwordBreached: true` means the password used appears in a breach — prompt a change.
 
@@ -106,8 +107,8 @@ their own account here.
 
 | Endpoint | Limit |
 |---|---|
-| `POST /auth/signup` | 5 per hour |
-| `POST /auth/login` | 20 — plus 10 per *account* across all IPs |
+| `POST /auth/signup` | 5 accepted per hour (attempts refused as invalid don't count), 30 attempts per hour |
+| `POST /auth/login` | 20 — plus 10 per *account* across all IPs; a browser that has signed in to the account before has its own 10 |
 | `POST /auth/mfa` | 20 — plus 5 wrong codes per account |
 | `POST /auth/forgot-password`, `/auth/resend-verification` | 5 |
 | `POST /auth/reset-password` | 10 |

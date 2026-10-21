@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.0.1 — 2026-10-21
+
+Fixes from a full black-box security and usability verification of 2.0.0
+(a live attack suite against the Docker stack and a browser walkthrough).
+
+### Fixed
+
+- **Signing in with a recovery code failed on MySQL** (500): the session's
+  `auth_method` column was too short for `PASSWORD_RECOVERY_CODE`. Migration
+  `V3` widens it, and a new MySQL test checks every enum against its column.
+- **Security events raised in signed-in requests were missing from JSON logs**
+  (`prod` profile): the audit logger's `userId` field collided with the MDC's.
+  The field is now `subjectUserId` — update SIEM queries that used `userId`.
+- **Two tabs refreshing at once signed the user out**: the refused stale token's
+  reply cleared the cookie the other tab had just received.
+- **An attacker could keep an account's owner from signing in** by spending its
+  sign-in budget every 15 minutes. Browsers that have signed in before now carry
+  a device cookie and keep a budget of their own.
+- Signups refused as invalid (e.g. a breached password) used up the hourly
+  signup limit; only accepted signups count now (attempts are capped at 30/hour).
+- After a pre-hijacking attempt, the account kept the attacker's display name;
+  verification now applies the name from the signup that was proven.
+- Admin user search treated `%` and `_` as wildcards.
+
 ## 2.0.0 — 2026-10-21
 
 A security-focused major release. **Upgrading signs every user out once** and

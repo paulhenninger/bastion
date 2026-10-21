@@ -41,7 +41,7 @@ public class UserSession {
     private User user;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "auth_method", nullable = false, length = 20)
+    @Column(name = "auth_method", nullable = false, length = 32)
     private AuthMethod authMethod;
 
     /** Two factors were proven for this session (at sign-in or by enrolling one in it). */

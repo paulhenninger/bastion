@@ -17,11 +17,13 @@ import dev.bastion.common.ApiException;
 import dev.bastion.config.AppProperties;
 import dev.bastion.email.EmailDeliverability;
 import dev.bastion.security.ClientInfo;
+import dev.bastion.security.DeviceCookies;
 import dev.bastion.security.JwtService;
 import dev.bastion.security.PasswordPolicy;
 import dev.bastion.security.TurnstileVerifier;
 import dev.bastion.passkey.PasskeyService;
 import dev.bastion.session.SessionController.AssertionRequest;
+import dev.bastion.session.SessionService;
 import dev.bastion.session.SessionService.Issued;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -68,11 +70,13 @@ public class AuthController {
     private final PasswordPolicy passwordPolicy;
     private final JwtService jwt;
     private final PasskeyService passkeys;
+    private final DeviceCookies deviceCookies;
     private final AppProperties props;
 
     public AuthController(AuthService auth, SettingsService settings, TurnstileVerifier turnstile,
                           EmailDeliverability deliverability, PasswordPolicy passwordPolicy,
-                          JwtService jwt, PasskeyService passkeys, AppProperties props) {
+                          JwtService jwt, PasskeyService passkeys, DeviceCookies deviceCookies,
+                          AppProperties props) {
         this.auth = auth;
         this.settings = settings;
         this.turnstile = turnstile;
@@ -80,6 +84,7 @@ public class AuthController {
         this.passwordPolicy = passwordPolicy;
         this.jwt = jwt;
         this.passkeys = passkeys;
+        this.deviceCookies = deviceCookies;
         this.props = props;
     }
 
@@ -106,7 +111,7 @@ public class AuthController {
     @PostMapping("/verify-email")
     public ResponseEntity<AuthResponse> verifyEmail(@Valid @RequestBody VerifyEmailRequest request,
                                                     HttpServletRequest http) {
-        return withSession(auth.verifyEmail(request.token(), request.password(), ClientInfo.of(http)), null);
+        return signedIn(auth.verifyEmail(request.token(), request.password(), ClientInfo.of(http)), null);
     }
 
     @PostMapping("/resend-verification")
@@ -118,20 +123,22 @@ public class AuthController {
 
     /** Password correct → a session, or (two-factor on) a challenge for {@code /mfa}. */
     @PostMapping("/login")
-    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
-        AuthService.LoginResult result = auth.login(request.email(), request.password(), ClientInfo.of(http));
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http,
+                                   @CookieValue(value = DeviceCookies.NAME, required = false) String device) {
+        AuthService.LoginResult result = auth.login(request.email(), request.password(), ClientInfo.of(http), device);
         Boolean breached = result.passwordBreached() ? Boolean.TRUE : null;
         if (result.mfaToken() != null) {
             return ResponseEntity.ok()
                     .cacheControl(CacheControl.noStore())
                     .body(new MfaChallengeResponse(true, result.mfaToken(), breached));
         }
-        return withSession(result.session(), breached);
+        return signedIn(result.session(), breached);
     }
 
     @PostMapping("/mfa")
-    public ResponseEntity<AuthResponse> mfa(@Valid @RequestBody MfaRequest request, HttpServletRequest http) {
-        return withSession(auth.completeMfa(request.mfaToken(), request.code(), ClientInfo.of(http)), null);
+    public ResponseEntity<AuthResponse> mfa(@Valid @RequestBody MfaRequest request, HttpServletRequest http,
+                                            @CookieValue(value = DeviceCookies.NAME, required = false) String device) {
+        return signedIn(auth.completeMfa(request.mfaToken(), request.code(), ClientInfo.of(http), device), null);
     }
 
     /** Options for a usernameless passkey sign-in ({@code navigator.credentials.get()}). */
@@ -143,7 +150,7 @@ public class AuthController {
     @PostMapping("/passkey/verify")
     public ResponseEntity<AuthResponse> passkeyVerify(@Valid @RequestBody AssertionRequest request,
                                                       HttpServletRequest http) {
-        return withSession(auth.passkeyLogin(request.toAssertion(), ClientInfo.of(http)), null);
+        return signedIn(auth.passkeyLogin(request.toAssertion(), ClientInfo.of(http)), null);
     }
 
     @PostMapping("/refresh")
@@ -154,7 +161,13 @@ public class AuthController {
         if (refreshToken == null || refreshToken.isBlank() || refreshToken.length() > 100) {
             return unauthorizedWithClearedCookie();
         }
-        return auth.refresh(refreshToken)
+        SessionService.Rotation rotation = auth.refresh(refreshToken);
+        if (rotation.superseded()) {
+            // Another tab rotated this cookie a moment ago and the browser already holds
+            // the replacement: refuse, but don't clear it — that would sign out every tab.
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return rotation.session()
                 .map(issued -> withSession(issued, null))
                 .orElseGet(this::unauthorizedWithClearedCookie);
     }
@@ -205,13 +218,25 @@ public class AuthController {
         }
     }
 
+    /** A completed sign-in: the session, plus a device cookie marking this browser as known. */
+    private ResponseEntity<AuthResponse> signedIn(Issued issued, Boolean passwordBreached) {
+        return withSession(issued, passwordBreached, deviceCookies.issue(issued.user().getId()));
+    }
+
     private ResponseEntity<AuthResponse> withSession(Issued issued, Boolean passwordBreached) {
+        return withSession(issued, passwordBreached, null);
+    }
+
+    private ResponseEntity<AuthResponse> withSession(Issued issued, Boolean passwordBreached, ResponseCookie device) {
         Duration cookieLife = Duration.between(java.time.Instant.now(), issued.session().getExpiresAt());
-        return ResponseEntity.ok()
+        var response = ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
-                .header(HttpHeaders.SET_COOKIE, cookie(issued.refreshToken(), cookieLife).toString())
-                .body(new AuthResponse(issued.accessToken(), jwt.accessTokenSeconds(),
-                        UserSummary.from(issued.user()), passwordBreached));
+                .header(HttpHeaders.SET_COOKIE, cookie(issued.refreshToken(), cookieLife).toString());
+        if (device != null) {
+            response.header(HttpHeaders.SET_COOKIE, device.toString());
+        }
+        return response.body(new AuthResponse(issued.accessToken(), jwt.accessTokenSeconds(),
+                UserSummary.from(issued.user()), passwordBreached));
     }
 
     private ResponseEntity<AuthResponse> unauthorizedWithClearedCookie() {

@@ -4,6 +4,7 @@ import dev.bastion.auth.AuthController;
 import dev.bastion.support.IntegrationTest;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.sql.Timestamp;
@@ -15,6 +16,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.after;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -122,6 +124,22 @@ class AuthFlowIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void thePreRegisteringAttackersDisplayNameDoesntStick() throws Exception {
+        mvc.perform(postJson("/api/v1/auth/signup",
+                Map.of("email", EMAIL, "password", "attacker-knows-this-1", "name", "Support: call +1 555 0100")))
+                .andExpect(status().isCreated());
+        clearInvocations(email);
+        mvc.perform(postJson("/api/v1/auth/signup", Map.of("email", EMAIL, "password", PASSWORD, "name", "Victoria")))
+                .andExpect(status().isCreated());
+        ArgumentCaptor<String> victimToken = ArgumentCaptor.forClass(String.class);
+        verify(email).sendVerificationEmail(eq(EMAIL), victimToken.capture());
+
+        verifyEmail(victimToken.getValue(), PASSWORD)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.name").value("Victoria"));
+    }
+
+    @Test
     void weakAndAccountNamePasswordsAreRefused() throws Exception {
         mvc.perform(postJson("/api/v1/auth/signup", Map.of("email", EMAIL, "password", "short")))
                 .andExpect(status().isBadRequest())
@@ -195,6 +213,31 @@ class AuthFlowIntegrationTest extends IntegrationTest {
         refresh(phone.refreshCookie()).andExpect(status().isUnauthorized());
         mvc.perform(as(phone, get("/api/v1/users/me"))).andExpect(status().isUnauthorized());
         verify(email).sendSecurityNotice(eq(EMAIL), eq("Suspicious session activity"), anyString());
+    }
+
+    @Test
+    void twoTabsRefreshingAtOnceDontSignEachOtherOut() throws Exception {
+        Session session = newAccount(EMAIL);
+
+        // Tab A rotates; the browser now holds A's new cookie.
+        MvcResult first = refresh(session.refreshCookie()).andExpect(status().isOk()).andReturn();
+        // Tab B's request left with the old cookie a moment earlier.
+        MvcResult second = refresh(session.refreshCookie()).andExpect(status().isUnauthorized()).andReturn();
+
+        // B's refusal must not clear the cookie A just received…
+        assertThat(second.getResponse().getHeaders("Set-Cookie")).isEmpty();
+        // …so B's retry, with the browser's current cookie, succeeds.
+        refresh(first.getResponse().getCookie(AuthController.REFRESH_COOKIE)).andExpect(status().isOk());
+        verify(email, never()).sendSecurityNotice(eq(EMAIL), eq("Suspicious session activity"), anyString());
+    }
+
+    @Test
+    void aSignedOutCookieIsClearedOnRefresh() throws Exception {
+        Session session = newAccount(EMAIL);
+        mvc.perform(post("/api/v1/auth/logout").header(AuthController.CLIENT_HEADER, "web")
+                .cookie(session.refreshCookie())).andExpect(status().isOk());
+        MvcResult refused = refresh(session.refreshCookie()).andExpect(status().isUnauthorized()).andReturn();
+        assertThat(refused.getResponse().getHeader("Set-Cookie")).contains("Max-Age=0");
     }
 
     @Test

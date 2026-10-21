@@ -48,6 +48,10 @@ public class EmailVerificationToken {
     @Column(name = "password_hash", length = 255)
     private String passwordHash;
 
+    /** The display name typed with this signup, applied if this signup's password is the one proven. */
+    @Column(length = 100)
+    private String name;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -62,5 +66,7 @@ public class EmailVerificationToken {
     public void setUsedAt(Instant usedAt) { this.usedAt = usedAt; }
     public String getPasswordHash() { return passwordHash; }
     public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
     public Instant getCreatedAt() { return createdAt; }
 }

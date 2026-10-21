@@ -23,8 +23,8 @@ administration, audit logging and monitoring.
 - Passwords hashed with **Argon2id**; legacy BCrypt hashes upgraded transparently
 - New passwords checked against **Have I Been Pwned** (k-anonymity — the password
   never leaves the server); sign-ins with a breached password prompt a change
-- Throttling per IP *and* per account, race-free; soft lockout (no
-  denial-of-service by locking someone else out)
+- Throttling per IP *and* per account, race-free; soft lockout, with **device
+  cookies** so an attacker spending an account's budget can't lock its owner out
 
 **Account lifecycle**
 - Signup with email verification that **defeats account pre-hijacking**
@@ -71,7 +71,7 @@ administration, audit logging and monitoring.
 - Non-root containers, nginx that resets `X-Forwarded-For`, actuator never proxied
 
 **Quality**
-- 68 backend tests: full flows through MockMvc, real WebAuthn ceremonies against
+- 76 backend tests: full flows through MockMvc, real WebAuthn ceremonies against
   an emulated authenticator, RFC 6238 test vectors, and the real Flyway migrations
   on real MySQL (Testcontainers)
 - CI: tests, SpotBugs + find-sec-bugs, CodeQL, dependency review, `npm audit`,
