@@ -107,15 +107,33 @@ public class SessionService {
     }
 
     /**
-     * Consumes the presented refresh token and returns a replacement, or empty when it
-     * is unknown, expired, revoked, or its session/account is no longer allowed in.
+     * What presenting a refresh token achieved: a new session state ({@code issued}), or
+     * a refusal. {@code superseded} marks the benign refusal — the token was rotated
+     * moments ago by another tab of the same browser, which therefore already holds the
+     * replacement cookie. The caller must leave that cookie alone: clearing it would sign
+     * out every tab.
+     */
+    public record Rotation(Issued issued, boolean superseded) {
+
+        static Rotation refused() {
+            return new Rotation(null, false);
+        }
+
+        public Optional<Issued> session() {
+            return Optional.ofNullable(issued);
+        }
+    }
+
+    /**
+     * Consumes the presented refresh token and returns a replacement, or a refusal when
+     * it is unknown, expired, revoked, or its session/account is no longer allowed in.
      * Never throws for a bad token, so the reuse-detection revocation always commits.
      */
     @Transactional
-    public Optional<Issued> rotate(String rawToken) {
+    public Rotation rotate(String rawToken) {
         Optional<RefreshToken> found = refreshTokens.findForRotation(Tokens.sha256(rawToken));
         if (found.isEmpty()) {
-            return Optional.empty();
+            return Rotation.refused();
         }
         RefreshToken current = found.get();
         UserSession session = current.getSession();
@@ -123,7 +141,11 @@ public class SessionService {
         Instant now = Instant.now();
 
         if (current.getRevokedAt() != null) {
-            if (current.getRevokedAt().plus(REUSE_GRACE).isBefore(now) && session.getRevokedAt() == null) {
+            boolean withinGrace = !current.getRevokedAt().plus(REUSE_GRACE).isBefore(now);
+            if (withinGrace && current.getReplacedByHash() != null && session.isActive(now)) {
+                return new Rotation(null, true);
+            }
+            if (!withinGrace && session.getRevokedAt() == null) {
                 // A consumed token replayed well after rotation: two parties hold this
                 // session. We can't tell which is the owner, so everyone signs in again.
                 log.warn("Refresh token reuse detected for user {} — revoking all sessions", user.getId());
@@ -134,18 +156,19 @@ public class SessionService {
                                 + "As a precaution every device has been signed out. If you don't recognise "
                                 + "recent activity, change your password.");
             }
-            return Optional.empty();
+            return Rotation.refused();
         }
         if (current.getExpiresAt().isBefore(now) || !session.isActive(now)
                 || !user.isEnabled() || user.isLocked()) {
-            return Optional.empty();
+            return Rotation.refused();
         }
 
         String raw = mintRefreshToken(session, user, now);
         current.setRevokedAt(now);
         current.setReplacedByHash(Tokens.sha256(raw));
         session.setLastSeenAt(now);
-        return Optional.of(new Issued(jwt.issueAccessToken(user.getId(), session.getPublicId()), raw, session, user));
+        return new Rotation(new Issued(jwt.issueAccessToken(user.getId(), session.getPublicId()), raw, session, user),
+                false);
     }
 
     /** Sign-out of the session the presented token belongs to. */

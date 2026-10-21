@@ -65,6 +65,11 @@ public final class WindowCounter {
         return Math.max(1, (remaining + 999) / 1000);
     }
 
+    /** Gives one back to {@code key}'s current window (never below zero). */
+    public void decrement(String key) {
+        windows.computeIfPresent(key, (k, w) -> w.count() > 1 ? new Window(w.startMs(), w.count() - 1) : null);
+    }
+
     public void reset(String key) {
         windows.remove(key);
     }

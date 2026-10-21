@@ -89,7 +89,7 @@ public class AdminController {
         if (query.length() > 100) {
             throw ApiException.badRequest("Search is too long");
         }
-        Page<User> result = query.isEmpty() ? users.findAll(pageable) : users.search(query, pageable);
+        Page<User> result = query.isEmpty() ? users.findAll(pageable) : users.search(UserRepository.likeEscape(query), pageable);
         return PagedResponse.of(result.map(AdminUserRow::from));
     }
 

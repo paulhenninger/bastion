@@ -27,9 +27,15 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("select u from User u where u.id = :id")
     Optional<User> findByIdForUpdate(@Param("id") Long id);
 
-    @Query("select u from User u where lower(u.email) like lower(concat('%', :q, '%')) "
-            + "or lower(u.name) like lower(concat('%', :q, '%'))")
+    /** Substring search; {@code query} must already be escaped with {@link #likeEscape}. */
+    @Query("select u from User u where lower(u.email) like lower(concat('%', :q, '%')) escape '!' "
+            + "or lower(u.name) like lower(concat('%', :q, '%')) escape '!'")
     Page<User> search(@Param("q") String query, Pageable pageable);
+
+    /** Makes LIKE's wildcards literal, so searching for "%" finds a percent sign, not everyone. */
+    static String likeEscape(String text) {
+        return text.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+    }
 
     @Modifying
     @Query("delete from User u where u.enabled = false and u.createdAt < :cutoff")

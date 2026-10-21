@@ -13,6 +13,7 @@ import dev.bastion.passkey.PasskeyService;
 import dev.bastion.security.AttemptGuard;
 import dev.bastion.security.BreachedPasswords;
 import dev.bastion.security.ClientInfo;
+import dev.bastion.security.DeviceCookies;
 import dev.bastion.security.LoginThrottle;
 import dev.bastion.security.PasswordPolicy;
 import dev.bastion.security.Tokens;
@@ -74,6 +75,7 @@ public class AuthService {
     private final PasswordPolicy passwordPolicy;
     private final BreachedPasswords breachedPasswords;
     private final LoginThrottle loginThrottle;
+    private final DeviceCookies deviceCookies;
     private final AttemptGuard attempts;
     private final SettingsService settings;
     private final BootstrapAdmin bootstrapAdmin;
@@ -90,7 +92,7 @@ public class AuthService {
                        SessionService sessions, MfaService mfa, PasskeyService passkeys,
                        PasswordEncoder passwordEncoder,
                        PasswordPolicy passwordPolicy, BreachedPasswords breachedPasswords,
-                       LoginThrottle loginThrottle, AttemptGuard attempts, SettingsService settings,
+                       LoginThrottle loginThrottle, DeviceCookies deviceCookies, AttemptGuard attempts, SettingsService settings,
                        BootstrapAdmin bootstrapAdmin, RecoveryMailer recoveryMailer, EmailService email,
                        SecurityEvents events, AppProperties props, PlatformTransactionManager transactionManager) {
         this.users = users;
@@ -104,6 +106,7 @@ public class AuthService {
         this.passwordPolicy = passwordPolicy;
         this.breachedPasswords = breachedPasswords;
         this.loginThrottle = loginThrottle;
+        this.deviceCookies = deviceCookies;
         this.attempts = attempts;
         this.settings = settings;
         this.bootstrapAdmin = bootstrapAdmin;
@@ -156,6 +159,7 @@ public class AuthService {
             token.setUser(user);
             token.setTokenHash(Tokens.sha256(raw));
             token.setPasswordHash(hash);
+            token.setName(cleanName);
             token.setExpiresAt(now.plus(Duration.ofHours(props.verificationTokenHours())));
             verificationTokens.save(token);
             email.sendVerificationEmail(address, raw);
@@ -182,15 +186,17 @@ public class AuthService {
 
         String budget = "verify:" + user.getId();
         attempts.acquire(budget);
-        // Candidates: each live signup's password, plus the account's original one (so a
-        // resent link still works with the password first chosen).
-        List<String> candidates = new ArrayList<>();
+        // Candidates: each live signup's password (with the name typed alongside it), plus
+        // the account's original one (so a resent link still works with the password
+        // first chosen). The name comes from the signup proven, like the password: never
+        // one chosen by whoever registered the address first.
+        List<Signup> candidates = new ArrayList<>();
         verificationTokens.findPendingWithPassword(user.getId(), Instant.now()).stream()
                 .limit(RecoveryMailer.MAX_PENDING_VERIFICATIONS)
-                .forEach(t -> candidates.add(t.getPasswordHash()));
-        candidates.add(user.getPasswordHash());
-        String chosen = candidates.stream()
-                .filter(hash -> passwordEncoder.matches(password, hash))
+                .forEach(t -> candidates.add(new Signup(t.getPasswordHash(), t.getName())));
+        candidates.add(new Signup(user.getPasswordHash(), user.getName()));
+        Signup chosen = candidates.stream()
+                .filter(signup -> passwordEncoder.matches(password, signup.passwordHash()))
                 .findFirst()
                 .orElseThrow(() -> ApiException.badRequest(
                         "That isn't the password you chose when signing up. If you've forgotten it, sign up again."));
@@ -203,7 +209,8 @@ public class AuthService {
                 throw ApiException.badRequest(INVALID_LINK);
             }
             User managed = users.findByIdForUpdate(user.getId()).orElseThrow();
-            managed.setPasswordHash(chosen);
+            managed.setPasswordHash(chosen.passwordHash());
+            managed.setName(chosen.name());
             managed.setPasswordChangedAt(now);
             managed.setEnabled(true);
             bootstrapAdmin.promoteIfEligible(managed);
@@ -213,19 +220,28 @@ public class AuthService {
         return sessions.start(verified, AuthMethod.EMAIL_VERIFICATION, client);
     }
 
+    private record Signup(String passwordHash, String name) {
+    }
+
     // ------------------------------------------------------------------- login
 
     /** Either a session, or a challenge for the second factor. */
     public record LoginResult(Issued session, String mfaToken, boolean passwordBreached) {
     }
 
-    public LoginResult login(String rawEmail, String password, ClientInfo client) {
+    /**
+     * @param deviceCookie the browser's {@link DeviceCookies device cookie}, if any: proof it
+     *                     has signed in to this account before, which earns it a sign-in
+     *                     budget of its own
+     */
+    public LoginResult login(String rawEmail, String password, ClientInfo client, String deviceCookie) {
         String address = EmailAddress.normalize(rawEmail);
-        if (!loginThrottle.tryAcquire(address)) {
+        Optional<User> found = users.findByEmail(address);
+        DeviceCookies.Device device = knownDevice(deviceCookie, found.orElse(null));
+        if (!loginThrottle.tryAcquire(address, device)) {
             events.addForEmail(SecurityEventType.SIGN_IN_BLOCKED, address, "too many attempts");
             throw ApiException.tooManyRequests("Too many sign-in attempts. Wait 15 minutes and try again.");
         }
-        Optional<User> found = users.findByEmail(address);
         // Constant-shape verification: always one Argon2 comparison.
         String hash = found.map(User::getPasswordHash).orElse(timingDummyHash);
         boolean passwordOk = passwordEncoder.matches(password, hash);
@@ -263,13 +279,13 @@ public class AuthService {
             // Not a completed sign-in: the attempt budget stands until the code is right.
             return new LoginResult(null, mfa.startChallenge(user), breached);
         }
-        loginThrottle.recordSuccess(address);
+        loginThrottle.recordSuccess(address, device);
         return new LoginResult(sessions.start(user, AuthMethod.PASSWORD, client), null, breached);
     }
 
-    public Issued completeMfa(String mfaToken, String code, ClientInfo client) {
+    public Issued completeMfa(String mfaToken, String code, ClientInfo client, String deviceCookie) {
         MfaService.Verified verified = mfa.completeChallenge(mfaToken, code);
-        loginThrottle.recordSuccess(verified.user().getEmail());
+        loginThrottle.recordSuccess(verified.user().getEmail(), knownDevice(deviceCookie, verified.user()));
         AuthMethod method = verified.factor() == MfaService.Factor.TOTP
                 ? AuthMethod.PASSWORD_TOTP : AuthMethod.PASSWORD_RECOVERY_CODE;
         return sessions.start(verified.user(), method, client);
@@ -281,11 +297,18 @@ public class AuthService {
      */
     public Issued passkeyLogin(PasskeyService.Assertion assertion, ClientInfo client) {
         User user = passkeys.authenticate(assertion);
-        loginThrottle.recordSuccess(user.getEmail());
+        loginThrottle.recordSuccess(user.getEmail(), null);
         return sessions.start(user, AuthMethod.PASSKEY, client);
     }
 
-    public Optional<Issued> refresh(String rawRefreshToken) {
+    /** The device cookie, when it is genuine and was issued to {@code user}'s account. */
+    private DeviceCookies.Device knownDevice(String cookie, User user) {
+        return user == null ? null : deviceCookies.verify(cookie)
+                .filter(d -> d.userId() == user.getId())
+                .orElse(null);
+    }
+
+    public SessionService.Rotation refresh(String rawRefreshToken) {
         return sessions.rotate(rawRefreshToken);
     }
 

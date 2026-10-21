@@ -87,7 +87,7 @@ public class SecurityEvents {
             // Key-values become fields in structured (JSON) logs; the message stays readable as text.
             audit.atInfo()
                     .addKeyValue("event", type.name())
-                    .addKeyValue("userId", userId)
+                    .addKeyValue("subjectUserId", userId)
                     .addKeyValue("actorId", actorId)
                     .addKeyValue("ip", ip)
                     .log("security_event type={} userId={} actorId={} ip={} detail={}",

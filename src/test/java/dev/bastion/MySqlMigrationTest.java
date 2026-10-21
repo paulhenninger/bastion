@@ -81,6 +81,8 @@ class MySqlMigrationTest {
     JdbcTemplate jdbc;
     @MockitoBean
     EmailService email;
+    @Autowired
+    jakarta.persistence.EntityManagerFactory entityManagerFactory;
 
     @Test
     @Order(1)
@@ -120,5 +122,39 @@ class MySqlMigrationTest {
                 .readTree(verified.getResponse().getContentAsString()).get("accessToken").asString();
         mvc.perform(get("/api/v1/users/me/sessions").header("Authorization", "Bearer " + access))
                 .andExpect(status().isOk());
+    }
+
+    /**
+     * Hibernate's {@code validate} checks column types, not lengths, and the H2 suite
+     * builds its schema from the entities — so an enum constant longer than its
+     * migration's VARCHAR passes everything until it is first written on MySQL. 2.0.0
+     * shipped exactly that ({@code PASSWORD_RECOVERY_CODE} in a VARCHAR(20)): recovery
+     * codes couldn't sign anyone in. Every enum-valued column, every constant, checked.
+     */
+    @Test
+    @Order(4)
+    void everyEnumConstantFitsItsColumn() {
+        int checked = 0;
+        for (var entity : entityManagerFactory.getMetamodel().getEntities()) {
+            Class<?> type = entity.getJavaType();
+            String table = type.getAnnotation(jakarta.persistence.Table.class).name();
+            for (var field : type.getDeclaredFields()) {
+                if (!field.isAnnotationPresent(jakarta.persistence.Enumerated.class)) {
+                    continue;
+                }
+                var column = field.getAnnotation(jakarta.persistence.Column.class);
+                String name = column != null && !column.name().isEmpty() ? column.name() : field.getName();
+                Integer width = jdbc.queryForObject("select character_maximum_length from information_schema.columns "
+                        + "where table_schema = database() and table_name = ? and column_name = ?",
+                        Integer.class, table, name);
+                for (Object constant : field.getType().getEnumConstants()) {
+                    assertThat(((Enum<?>) constant).name().length())
+                            .as("%s.%s = %s", table, name, constant)
+                            .isLessThanOrEqualTo(width);
+                }
+                checked++;
+            }
+        }
+        assertThat(checked).isGreaterThanOrEqualTo(4);
     }
 }

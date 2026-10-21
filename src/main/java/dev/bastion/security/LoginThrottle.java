@@ -19,8 +19,13 @@ import java.util.Locale;
  *
  * <p>Keyed on the address exactly as typed and charged whether or not an account
  * exists — a 429 must not reveal which addresses are registered. A soft lock that
- * lifts by itself: a hard lockout would let anyone who knows an address deny its
- * owner service.
+ * lifts by itself.
+ *
+ * <p><b>Known devices have a budget of their own.</b> On its own, a per-account budget
+ * lets anyone who knows an address keep its owner locked out by spending it every
+ * window. A browser that has signed in to the account before presents a
+ * {@link DeviceCookies device cookie}; its attempts are charged to that device instead,
+ * so the owner gets in however hard someone else is hammering the account.
  */
 @Component
 public class LoginThrottle {
@@ -35,17 +40,25 @@ public class LoginThrottle {
         this.enabled = props.security().rateLimitsEnabled();
     }
 
-    /** Charges one attempt; false when the account's budget is already spent. */
-    public boolean tryAcquire(String email) {
-        return !enabled || attempts.increment(key(email)) <= MAX_ATTEMPTS;
+    /**
+     * Charges one attempt — to {@code knownDevice} when the browser proved it has signed
+     * in to this account before, otherwise to the account. False when that budget is spent.
+     */
+    public boolean tryAcquire(String email, DeviceCookies.Device knownDevice) {
+        return !enabled || attempts.increment(key(email, knownDevice)) <= MAX_ATTEMPTS;
     }
 
     /** A sign-in completed: the owner shouldn't stay penalised for earlier typos. */
-    public void recordSuccess(String email) {
-        attempts.reset(key(email));
+    public void recordSuccess(String email, DeviceCookies.Device knownDevice) {
+        attempts.reset(key(email, null));
+        if (knownDevice != null) {
+            attempts.reset(key(email, knownDevice));
+        }
     }
 
-    private static String key(String email) {
-        return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+    private static String key(String email, DeviceCookies.Device knownDevice) {
+        return knownDevice != null
+                ? "device:" + knownDevice.id()
+                : "account:" + (email == null ? "" : email.trim().toLowerCase(Locale.ROOT));
     }
 }

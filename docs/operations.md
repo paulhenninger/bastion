@@ -97,7 +97,8 @@ line inside a request carries `requestId` (also returned to the client as
 `X-Request-Id`) and, once authenticated, `userId`.
 
 Security events are additionally written to the logger **`bastion.audit`** as
-`security_event` lines with `event`, `userId`, `actorId` and `ip` fields — ship
+`security_event` lines with `event`, `subjectUserId` (the account the event is
+about), `actorId` and `ip` fields — ship
 that logger to your SIEM. The same events are stored in the `security_events`
 table for the admin viewer and each user's activity page, and purged after
 `AUDIT_RETENTION_DAYS`.
@@ -109,7 +110,9 @@ investigate an account) — treat those logs as personal data.
 ## Key rotation
 
 **`JWT_SECRET`** — replace and restart. Outstanding access tokens stop
-validating; clients refresh with their cookie. Nobody is signed out.
+validating; clients refresh with their cookie. Nobody is signed out. Device
+cookies (sign-in throttling) are signed with a key derived from it, so every
+browser counts as new until it next signs in.
 
 **`DATA_ENCRYPTION_KEY`** — set the new key, move the old one to
 `DATA_ENCRYPTION_PREVIOUS_KEYS`, restart. Old secrets stay readable and are

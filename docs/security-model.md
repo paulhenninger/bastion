@@ -34,6 +34,7 @@ without `DATA_ENCRYPTION_KEY`, which is kept outside the database.
 |---|---|---|
 | Online password guessing from one IP | Per-IP rate limit on `/auth/login` (20 / 15 min) and nginx `limit_req` | `RateLimitingIntegrationTest.oneIpHammeringLoginIsThrottledPerIp` |
 | Password spraying one account from many IPs | Per-account budget (10 / 15 min), charged *before* the check so parallel bursts can't exceed it, refunded on success; applied identically to unknown addresses | `…passwordSprayingOneAccountFromManyIpsIsThrottledPerAccount` |
+| Locking the owner out by spending that budget | **Device cookies** (OWASP): a browser that has signed in to the account before presents a signed, `HttpOnly` cookie and draws on a budget of its own, so only never-seen browsers are blocked during an attack. A forged or stolen cookie buys no more than any new browser gets | `…anAttackerSpendingTheAccountBudgetDoesntLockTheOwnerOutOfAKnownBrowser` |
 | Credential stuffing with breached passwords | New passwords checked against Have I Been Pwned (k-anonymity: only 5 hex chars of SHA-1 leave the server); sign-in with a breached password flags the session so the UI demands a change | `SecurityPrimitivesTest.breachCheck…` |
 | Weak passwords | Minimum 12 characters (configurable), maximum 128, must not contain the email; no composition rules (NIST SP 800-63B) | `AuthFlowIntegrationTest.weakAndAccountNamePasswordsAreRefused` |
 | Offline cracking of a stolen database | Argon2id; legacy BCrypt rehashed to Argon2id at next sign-in | `…legacyBcryptHashesStillWorkAndAreUpgradedToArgon2` |
@@ -55,7 +56,7 @@ without `DATA_ENCRYPTION_KEY`, which is kept outside the database.
 
 | Threat | Control | Test |
 |---|---|---|
-| **Account pre-hijacking** (attacker registers your address first with their password) | Each signup's verification token carries *that signup's* password hash; verifying requires typing the password, and the password you prove is the one applied | `…preRegisteringSomeoneElsesAddressGainsNothing` |
+| **Account pre-hijacking** (attacker registers your address first with their password) | Each signup's verification token carries *that signup's* password hash (and display name); verifying requires typing the password, and the signup you prove is the one applied | `…preRegisteringSomeoneElsesAddressGainsNothing`, `…thePreRegisteringAttackersDisplayNameDoesntStick` |
 | Reset link reused / raced | Single-use via conditional `UPDATE … WHERE used_at IS NULL`; a newer link kills older ones; any password change kills all | `…passwordResetEndsEverySessionAndLinksAreSingleUse` |
 | Inbox compromise bypasses MFA | A reset never removes TOTP and never signs in | `MfaIntegrationTest.passwordResetDoesNotRemoveTheSecondFactor` |
 | Tokens leaking via logs or Referer | Emailed links use the URL **fragment** (`#token=`), never sent to servers; SPA strips it from history; `Referrer-Policy: no-referrer` | e2e (link format) |
@@ -68,7 +69,7 @@ without `DATA_ENCRYPTION_KEY`, which is kept outside the database.
 | Threat | Control | Test |
 |---|---|---|
 | XSS steals a long-lived credential | Access token in JS memory only (15 min); refresh token `HttpOnly`; strict CSP with no `unsafe-inline` scripts | `…signupVerifyLoginRefreshLogout` (cookie flags) |
-| Stolen refresh token | Rotation on every use; replay after the 60 s grace revokes **every** session and emails the owner | `…refreshTokenReplayRevokesEverySession` |
+| Stolen refresh token | Rotation on every use; replay after the 60 s grace revokes **every** session and emails the owner. Inside the grace window (two tabs refreshing at once) the stale token is refused *without* clearing the browser's newer cookie | `…refreshTokenReplayRevokesEverySession`, `…twoTabsRefreshingAtOnceDontSignEachOtherOut` |
 | Two requests racing one refresh token into two sessions | Rotation takes a row lock (`SELECT … FOR UPDATE`) | `MySqlMigrationTest` (InnoDB) |
 | Revoked session keeps working until JWT expiry | Every request re-reads the session row: logout, revoke, lock, password reset take effect on the next request | `…signupVerifyLoginRefreshLogout`, `…lockingAUserEndsTheirSessionsImmediately` |
 | Sessions living forever | 14-day idle timeout, 30-day absolute lifetime | `…sessionsEndAtTheirAbsoluteExpiryHoweverActive` |
@@ -128,7 +129,11 @@ alone would defeat two-factor. Recovery codes, a passkey, or an administrator
 
 **Why a soft lockout rather than locking accounts after N failures?** A hard
 lockout lets anyone who knows an address deny its owner service. Bastion's
-throttle lifts after 15 minutes and applies identically to unknown addresses.
+throttle lifts after 15 minutes and applies identically to unknown addresses —
+and even while it's in force, a browser that has signed in to the account before
+keeps its own budget (device cookies), so the owner isn't locked out. Someone
+signing in from a brand-new browser during an attack can wait it out, use a
+passkey (not throttled per account), or reset their password.
 
 **Why does verifying an email require the password?** It's what defeats
 account pre-hijacking; it costs the user one field they'd type at sign-in anyway.

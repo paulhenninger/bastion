@@ -155,6 +155,20 @@ class AccountAndAdminIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void userSearchTreatsWildcardsLiterally() throws Exception {
+        Session admin = strongAdmin();
+        newAccount("plain@example.com");
+        newAccount("under_score@example.com");
+        mvc.perform(as(admin, get("/api/v1/admin/users").param("q", "%")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0));
+        mvc.perform(as(admin, get("/api/v1/admin/users").param("q", "r_s")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].email").value("under_score@example.com"))
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
     void demotionTakesEffectOnTheNextRequest() throws Exception {
         Session admin = strongAdmin();
         Session other = newAccount("other.admin@example.com");
