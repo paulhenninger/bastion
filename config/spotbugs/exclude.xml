@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Findings reviewed and judged not to be defects. Each entry says why. Anything new
+  that SpotBugs / find-sec-bugs reports must be fixed or argued for here, in review.
+-->
+<FindBugsFilter>
+    <!-- JPA entities and records expose their state by design. -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+    <!-- Spring beans fail fast in constructors on bad configuration, on purpose. -->
+    <Match>
+        <Bug pattern="CT_CONSTRUCTOR_THROW"/>
+    </Match>
+    <!-- Email bodies are plain-text templates; "\n" line ends are intended (SMTP normalises them). -->
+    <Match>
+        <Class name="dev.bastion.email.EmailService"/>
+        <Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/>
+    </Match>
+    <!-- CSRF: the API authenticates with a Bearer header a cross-site page can't attach; the
+         one cookie is SameSite=Strict, path-scoped, and its endpoints require a custom header
+         (AuthController.CLIENT_HEADER). Covered by AuthFlowIntegrationTest. -->
+    <Match>
+        <Class name="dev.bastion.config.SecurityConfig"/>
+        <Bug pattern="SPRING_CSRF_PROTECTION_DISABLED"/>
+    </Match>
+    <!-- writeJson is only ever called with compile-time constant messages. -->
+    <Match>
+        <Class name="dev.bastion.config.SecurityConfig"/>
+        <Bug pattern="XSS_SERVLET"/>
+    </Match>
+    <!-- SHA-1 is Have I Been Pwned's lookup key for k-anonymity, not password storage (Argon2id). -->
+    <Match>
+        <Class name="dev.bastion.security.BreachedPasswords"/>
+        <Bug pattern="WEAK_MESSAGE_DIGEST_SHA1"/>
+    </Match>
+    <!-- The echoed X-Request-Id must match ^[A-Za-z0-9._-]{8,64}$ first: no CR/LF can pass. -->
+    <Match>
+        <Class name="dev.bastion.security.RequestIdFilter"/>
+        <Bug pattern="HRS_REQUEST_PARAMETER_TO_HTTP_HEADER"/>
+    </Match>
+</FindBugsFilter>

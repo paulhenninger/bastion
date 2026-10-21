@@ -1,0 +1,6 @@
+.git
+.gradle
+build
+frontend
+*.log
+.env

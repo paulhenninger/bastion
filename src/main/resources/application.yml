@@ -3,7 +3,10 @@ spring:
     name: bastion
 
   datasource:
-    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:bastion}
+    # connectionTimeZone/forceConnectionTimeZoneToSession pin the MySQL session to UTC
+    # so DATETIME columns hold UTC no matter where the server or JVM lives.
+    # DB_PARAMS lets production add TLS, e.g. "&sslMode=VERIFY_IDENTITY".
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:bastion}?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true${DB_PARAMS:}
     username: ${DB_USER:bastion}
     password: ${DB_PASS:bastion}
     hikari:
@@ -14,6 +17,10 @@ spring:
     hibernate:
       ddl-auto: validate   # Flyway owns the schema; Hibernate only checks it
     open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
 
   flyway:
     locations: classpath:db/migration
@@ -29,6 +36,7 @@ spring:
           auth: ${MAIL_SMTP_AUTH:false}
           starttls:
             enable: ${MAIL_STARTTLS:false}
+            required: ${MAIL_STARTTLS:false}
           # Jakarta Mail defaults all three to INFINITE — a relay that blackholes
           # TCP would otherwise hang request threads until Tomcat runs dry.
           connectiontimeout: ${MAIL_CONNECT_TIMEOUT_MS:10000}
@@ -36,30 +44,100 @@ spring:
           writetimeout: ${MAIL_WRITE_TIMEOUT_MS:10000}
 
   task:
+    execution:
+      pool:
+        # Bounded: mail and audit writes queue here. A flood must not grow threads
+        # without limit; past the queue, the caller runs the task itself.
+        core-size: ${ASYNC_POOL_SIZE:4}
+        max-size: ${ASYNC_POOL_SIZE:4}
+        queue-capacity: ${ASYNC_QUEUE_CAPACITY:1000}
     scheduling:
       pool:
         size: ${SCHEDULER_POOL_SIZE:4}
 
 app:
+  name: ${APP_NAME:Bastion}
   # REQUIRED — no default. Generate with: openssl rand -base64 32
   jwt-secret: ${JWT_SECRET:}
   access-token-minutes: ${ACCESS_TOKEN_MINUTES:15}
-  refresh-token-days: ${REFRESH_TOKEN_DAYS:30}
-  # Must match how you open the app in a browser — emailed links are built from it.
+  # Must match how you open the app in a browser — emailed links and the passkey
+  # origin are built from it.
   base-url: ${APP_BASE_URL:http://localhost:5173}
   mail-from: ${MAIL_FROM:Bastion <no-reply@bastion.local>}
-  verification-token-hours: 24
-  reset-token-minutes: 30
+  verification-token-hours: ${VERIFICATION_TOKEN_HOURS:24}
+  reset-token-minutes: ${RESET_TOKEN_MINUTES:30}
+  email-change-token-hours: ${EMAIL_CHANGE_TOKEN_HOURS:24}
+  session:
+    idle-days: ${SESSION_IDLE_DAYS:14}
+    max-days: ${SESSION_MAX_DAYS:30}
+    reauth-minutes: ${REAUTH_MINUTES:10}
+    new-sign-in-alerts: ${NEW_SIGN_IN_ALERTS:true}
   security:
     # Only enable behind a reverse proxy that RESETS X-Forwarded-For to the real
     # client address. Trusting the header on a directly-exposed app lets callers
     # spoof their own rate-limit key.
     trust-forwarded-for: ${TRUST_FORWARDED_FOR:false}
     cors-origins: ${CORS_ORIGINS:http://localhost:5173}
+    admin-requires-mfa: ${ADMIN_REQUIRES_MFA:true}
+    audit-retention-days: ${AUDIT_RETENTION_DAYS:180}
+    max-request-bytes: ${MAX_REQUEST_BYTES:65536}
+  passwords:
+    min-length: ${PASSWORD_MIN_LENGTH:12}
+    max-length: ${PASSWORD_MAX_LENGTH:128}
+    breach-check: ${PASSWORD_BREACH_CHECK:true}
+  encryption:
+    # REQUIRED — no default. Generate with: openssl rand -base64 32
+    # Encrypts TOTP secrets at rest. Back it up separately from the database:
+    # losing it means every user must re-enrol their authenticator app.
+    key: ${DATA_ENCRYPTION_KEY:}
+    previous-keys: ${DATA_ENCRYPTION_PREVIOUS_KEYS:}
+  signup:
+    open-by-default: ${SIGNUPS_OPEN:true}
+    block-disposable: ${SIGNUP_BLOCK_DISPOSABLE:true}
+    check-mx: ${SIGNUP_CHECK_MX:true}
+    purge-unverified-days: ${PURGE_UNVERIFIED_DAYS:7}
+  turnstile:
+    site-key: ${TURNSTILE_SITE_KEY:}
+    secret-key: ${TURNSTILE_SECRET_KEY:}
+  passkeys:
+    rp-id: ${PASSKEY_RP_ID:}
+    extra-origins: ${PASSKEY_EXTRA_ORIGINS:}
+  admin:
+    bootstrap-email: ${BOOTSTRAP_ADMIN_EMAIL:}
 
 server:
   port: ${SERVER_PORT:8080}
+  # Never reveal stack traces or exception messages in error pages.
+  error:
+    include-stacktrace: never
+    include-message: never
+  tomcat:
+    # Cheap DoS insurance: bounded headers and form posts.
+    max-http-form-post-size: 64KB
+    max-http-response-header-size: 16KB
+  max-http-request-header-size: 16KB
+
+# Actuator lives on its own port, which the bundled nginx never proxies:
+# health for orchestrators, Prometheus metrics for the scraper. Keep it off the
+# public internet.
+management:
+  server:
+    port: ${MANAGEMENT_PORT:9091}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 logging:
   level:
     dev.bastion: INFO
+    # Structured, one-line-per-event security log; ship it to your SIEM.
+    bastion.audit: INFO

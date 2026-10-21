@@ -2,6 +2,8 @@
 #   docker compose --profile full up -d --build
 # For day-to-day development run only the databases here and use
 # `./gradlew bootRun` + `npm run dev` for hot reload.
+#
+# This file is for development. For production see docs/operations.md.
 
 services:
   mysql:
@@ -12,7 +14,7 @@ services:
       MYSQL_USER: ${DB_USER:-bastion}
       MYSQL_PASSWORD: ${DB_PASS:-bastion}
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"   # loopback only: never expose a dev database
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
@@ -24,10 +26,10 @@ services:
   # Local mail catcher — every email the app sends lands in the web UI at
   # http://localhost:8025. Nothing leaves the machine.
   mailpit:
-    image: axllent/mailpit:latest
+    image: axllent/mailpit:v1.31.6
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
 
   app:
     profiles: ["full"]
@@ -39,12 +41,19 @@ services:
       DB_PASS: ${DB_PASS:-bastion}
       MAIL_HOST: mailpit
       MAIL_PORT: 1025
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env — generate with: openssl rand -base64 32}
-      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      JWT_SECRET: "${JWT_SECRET:?Set JWT_SECRET in .env (openssl rand -base64 32)}"
+      DATA_ENCRYPTION_KEY: "${DATA_ENCRYPTION_KEY:?Set DATA_ENCRYPTION_KEY in .env (openssl rand -base64 32)}"
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8081}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8081}
       MAIL_FROM: ${MAIL_FROM:-Bastion <no-reply@bastion.local>}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      # nginx (the web service) resets X-Forwarded-For, so the app may trust it.
+      TRUST_FORWARDED_FOR: "true"
+      # Mailpit's fake domains have no MX records.
+      SIGNUP_CHECK_MX: ${SIGNUP_CHECK_MX:-false}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:9091:9091"   # management (health, Prometheus) — loopback only
     depends_on:
       mysql:
         condition: service_healthy
@@ -53,7 +62,7 @@ services:
     profiles: ["full"]
     build: ./frontend
     ports:
-      - "8081:80"
+      - "127.0.0.1:8081:8080"
     depends_on:
       - app
 

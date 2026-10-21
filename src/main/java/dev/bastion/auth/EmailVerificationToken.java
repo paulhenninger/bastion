@@ -10,10 +10,19 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 import java.time.Instant;
 
-/** Single-use email-verification token; stored hashed, like every other secret at rest. */
+/**
+ * Single-use email-verification token; stored hashed, like every other secret at rest.
+ *
+ * <p>A token sent by a signup also carries the password chosen in <em>that</em> signup
+ * ({@link #passwordHash}). Verification applies whichever pending password the person
+ * clicking the link proves they know — see AuthService for why that defeats account
+ * pre-hijacking. A resend-verification token carries none: it only proves the inbox.
+ */
 @Entity
 @Table(name = "email_verification_tokens")
 public class EmailVerificationToken {
@@ -24,6 +33,7 @@ public class EmailVerificationToken {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id")
+    @OnDelete(action = OnDeleteAction.CASCADE)
     private User user;
 
     @Column(name = "token_hash", nullable = false, unique = true, length = 64)
@@ -34,6 +44,9 @@ public class EmailVerificationToken {
 
     @Column(name = "used_at")
     private Instant usedAt;
+
+    @Column(name = "password_hash", length = 255)
+    private String passwordHash;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -47,5 +60,7 @@ public class EmailVerificationToken {
     public void setExpiresAt(Instant expiresAt) { this.expiresAt = expiresAt; }
     public Instant getUsedAt() { return usedAt; }
     public void setUsedAt(Instant usedAt) { this.usedAt = usedAt; }
+    public String getPasswordHash() { return passwordHash; }
+    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
     public Instant getCreatedAt() { return createdAt; }
 }

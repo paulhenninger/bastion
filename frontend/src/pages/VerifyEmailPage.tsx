@@ -1,51 +1,67 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { verifyEmail } from '../api/auth';
-import { ApiError } from '../api/client';
+import { useState, type FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { takeTokenFromFragment, verifyEmail } from '../api/auth';
+import { messageOf } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 
+/**
+ * The verification link proves you read the inbox; the password proves you're the
+ * person who signed up. Asking for both is what stops someone else registering your
+ * address first with a password they know (account pre-hijacking).
+ */
 export default function VerifyEmailPage() {
-  const [params] = useSearchParams();
   const { setUser } = useAuth();
   const navigate = useNavigate();
+  const [token] = useState(takeTokenFromFragment);
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  // StrictMode double-mounts effects in dev; the token is single-use, so guard.
-  const fired = useRef(false);
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    const token = params.get('token');
-    if (!token) {
-      setError('This link is missing its token.');
-      return;
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError('');
+    setBusy(true);
+    try {
+      setUser(await verifyEmail(token, password));
+      navigate('/', { replace: true });
+    } catch (err) {
+      setError(messageOf(err));
+    } finally {
+      setBusy(false);
     }
-    if (fired.current) return;
-    fired.current = true;
-    (async () => {
-      try {
-        const user = await verifyEmail(token);
-        setUser(user);
-        navigate('/', { replace: true });
-      } catch (err) {
-        setError(err instanceof ApiError ? err.message : 'Could not reach the server');
-      }
-    })();
-  }, [params, setUser, navigate]);
+  }
+
+  if (!token) {
+    return (
+      <div className="card auth-card">
+        <h1>Verify your email</h1>
+        <p className="alert alert-error" role="alert">
+          This link is missing its token. Open the link from your email again, or sign up again for a new one.
+        </p>
+        <p className="auth-links">
+          <Link to="/login">Back to sign in</Link>
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="card auth-card">
-      <h1>Verifying…</h1>
-      {error ? (
-        <>
-          <p className="alert alert-error" role="alert">
-            {error}
-          </p>
-          <p>
-            <Link to="/login">Back to sign in</Link>
-          </p>
-        </>
-      ) : (
-        <p>Confirming your email address.</p>
+      <h1>Activate your account</h1>
+      <p className="hint">Enter the password you chose when you signed up.</p>
+      {error && (
+        <p className="alert alert-error" role="alert">
+          {error}
+        </p>
       )}
+      <form onSubmit={handleSubmit}>
+        <label htmlFor="password">Password</label>
+        <input id="password" type="password" autoComplete="current-password" required autoFocus
+               value={password} onChange={(e) => setPassword(e.target.value)} />
+        <button type="submit" disabled={busy}>
+          {busy ? 'Activating…' : 'Activate account'}
+        </button>
+      </form>
     </div>
   );
 }

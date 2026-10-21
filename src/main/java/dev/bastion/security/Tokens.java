@@ -15,14 +15,33 @@ public final class Tokens {
     private Tokens() {
     }
 
-    /** 256 bits of entropy, URL-safe — used for refresh, verification and reset tokens. */
+    /** 256 bits of entropy, URL-safe — used for refresh, verification, reset and challenge tokens. */
     public static String newOpaqueToken() {
-        byte[] bytes = new byte[32];
-        RANDOM.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        return randomBase64Url(32);
     }
 
-    /** Lowercase hex SHA-256 — the only form of a token that ever touches the database. */
+    /** {@code bytes} of entropy, base64url without padding. */
+    public static String randomBase64Url(int bytes) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes(bytes));
+    }
+
+    public static byte[] randomBytes(int n) {
+        byte[] bytes = new byte[n];
+        RANDOM.nextBytes(bytes);
+        return bytes;
+    }
+
+    /** A uniformly random int in [0, bound). */
+    public static int randomInt(int bound) {
+        return RANDOM.nextInt(bound);
+    }
+
+    /**
+     * Lowercase hex SHA-256 — the only form of a token that ever touches the database.
+     *
+     * <p>A fast hash is right here and wrong for passwords: these tokens carry 256 bits
+     * of entropy, so there is nothing to brute-force, and lookups by hash stay indexed.
+     */
     public static String sha256(String token) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -30,5 +49,13 @@ public final class Tokens {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 unavailable", e);
         }
+    }
+
+    /** Compares without leaking, through timing, how much of the value matched. */
+    public static boolean constantTimeEquals(String a, String b) {
+        if (a == null || b == null) {
+            return false;
+        }
+        return MessageDigest.isEqual(a.getBytes(StandardCharsets.UTF_8), b.getBytes(StandardCharsets.UTF_8));
     }
 }

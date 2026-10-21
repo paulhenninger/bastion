@@ -1,7 +1,6 @@
 package dev.bastion.security;
 
 import dev.bastion.config.AppProperties;
-import dev.bastion.user.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -19,9 +18,22 @@ import java.util.Optional;
  * Issues and validates the short-lived HS256 access token. Fails fast at startup if
  * the signing key is missing, not valid base64, or under 256 bits — a weak or
  * defaulted JWT secret is not a configuration this app will run with.
+ *
+ * <p>The token carries only identifiers: the user id ({@code sub}) and the session it
+ * belongs to ({@code sid}). No email, no role: authorisation is decided from the
+ * database on every request (see JwtAuthFilter), so a stale claim can never grant
+ * anything. Issuer and audience are pinned and checked, so a token minted by another
+ * service that happens to share the key is still refused.
+ *
+ * <p>Rotating {@code JWT_SECRET} is safe at any time: outstanding access tokens stop
+ * validating, clients refresh with their cookie, and nobody is signed out.
  */
 @Service
 public class JwtService {
+
+    static final String ISSUER = "bastion";
+    static final String AUDIENCE = "bastion-api";
+    private static final long CLOCK_SKEW_SECONDS = 30;
 
     private final SecretKey key;
     private final Duration accessTtl;
@@ -45,29 +57,44 @@ public class JwtService {
         this.accessTtl = Duration.ofMinutes(props.accessTokenMinutes());
     }
 
-    public String issueAccessToken(User user) {
+    public String issueAccessToken(Long userId, String sessionId) {
         Instant now = Instant.now();
         return Jwts.builder()
-                .subject(String.valueOf(user.getId()))
-                .claim("email", user.getEmail())
-                .claim("role", user.getRole().name())
+                .issuer(ISSUER)
+                .audience().add(AUDIENCE).and()
+                .subject(String.valueOf(userId))
+                .claim("sid", sessionId)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(accessTtl)))
-                .signWith(key)
+                .signWith(key, Jwts.SIG.HS256)
                 .compact();
     }
 
-    /** Returns the user id from a valid, unexpired token; empty otherwise. */
-    public Optional<Long> validate(String token) {
+    public long accessTokenSeconds() {
+        return accessTtl.toSeconds();
+    }
+
+    /** The user and session from a valid, unexpired token; empty otherwise. */
+    public Optional<AccessClaims> validate(String token) {
         try {
             Claims claims = Jwts.parser()
                     .verifyWith(key)
+                    .requireIssuer(ISSUER)
+                    .requireAudience(AUDIENCE)
+                    .clockSkewSeconds(CLOCK_SKEW_SECONDS)
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
-            return Optional.of(Long.parseLong(claims.getSubject()));
-        } catch (JwtException | NumberFormatException e) {
+            String sid = claims.get("sid", String.class);
+            if (sid == null || sid.isBlank()) {
+                return Optional.empty();
+            }
+            return Optional.of(new AccessClaims(Long.parseLong(claims.getSubject()), sid));
+        } catch (JwtException | IllegalArgumentException e) {
             return Optional.empty();
         }
+    }
+
+    public record AccessClaims(Long userId, String sessionId) {
     }
 }

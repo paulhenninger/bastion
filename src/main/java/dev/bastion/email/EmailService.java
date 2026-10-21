@@ -1,87 +1,151 @@
 package dev.bastion.email;
 
 import dev.bastion.config.AppProperties;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.scheduling.annotation.Async;
+import dev.bastion.security.ClientInfo;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+
 /**
- * Plain-SMTP email, fully env-driven. Dev default is the Mailpit catcher in the
- * compose stack (web UI at http://localhost:8025) — nothing leaves the machine.
- * Point MAIL_* at any relay (SES, Postmark, Mailgun SMTP) for production.
+ * Every message the app sends, as plain text. Plain text on purpose: no HTML to
+ * inject into, no tracking pixels, nothing a mail client can render deceptively.
  *
- * <p>Sends are {@code @Async}: a slow relay must never hold a signup request hostage.
+ * <p>Links carry their token in the URL <b>fragment</b> ({@code #token=...}). Browsers
+ * never send the fragment to a server, so tokens stay out of web-server access logs,
+ * proxy logs and {@code Referer} headers; the SPA reads it and POSTs it.
+ *
+ * <p>This class composes the message on the caller's thread (where the request's IP and
+ * device are known, for security notices) and hands it to {@link AsyncMailer}, which
+ * sends asynchronously — a slow relay must never hold a request hostage, and a send
+ * that fails must not change what the caller sees (the recovery endpoints reply
+ * identically either way).
  */
 @Service
 public class EmailService {
 
-    private static final Logger log = LoggerFactory.getLogger(EmailService.class);
+    private static final DateTimeFormatter WHEN =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'UTC'").withZone(ZoneOffset.UTC);
 
-    private final JavaMailSender mailSender;
+    private final AsyncMailer sender;
+    private final EmailRateLimiter limiter;
     private final AppProperties props;
 
-    public EmailService(JavaMailSender mailSender, AppProperties props) {
-        this.mailSender = mailSender;
+    public EmailService(AsyncMailer sender, EmailRateLimiter limiter, AppProperties props) {
+        this.sender = sender;
+        this.limiter = limiter;
         this.props = props;
     }
 
-    @Async
     public void sendVerificationEmail(String to, String token) {
-        String link = props.baseUrl() + "/verify-email?token=" + token;
-        send(to, "Verify your email",
-                """
-                Welcome!
+        send(to, "Verify your email address", """
+                Welcome to %s!
 
                 Confirm your email address to activate your account:
 
                 %s
 
-                This link expires in %d hours. If you didn't create an account, ignore this email.
-                """.formatted(link, props.verificationTokenHours()));
+                This link expires in %d hours. If you didn't create an account, ignore this
+                email — no account will be activated without the link.
+                """.formatted(props.name(), link("/verify-email", token), props.verificationTokenHours()));
     }
 
-    @Async
-    public void sendPasswordResetEmail(String to, String token) {
-        String link = props.baseUrl() + "/reset-password?token=" + token;
-        send(to, "Reset your password",
-                """
-                Someone requested a password reset for this account.
+    /** Someone tried to sign up with an address that already has an account. */
+    public void sendExistingAccountNotice(String to) {
+        send(to, "Sign-up attempt for your account", """
+                Someone tried to create a new %s account with this email address, which
+                already has one. Nothing about your account was changed.
+
+                If that was you: you can simply sign in, or reset your password here:
+                %s/forgot-password
+
+                If it wasn't you, you can ignore this email.
+                """.formatted(props.name(), props.baseUrl()));
+    }
+
+    /** @param requestedBy the client that asked, captured on the request thread (this may run async) */
+    public void sendPasswordResetEmail(String to, String token, ClientInfo requestedBy) {
+        send(to, "Reset your password", """
+                Someone requested a password reset for your %s account.
 
                 Set a new password here:
 
                 %s
 
-                This link expires in %d minutes and can be used once. If this wasn't you,
-                you can safely ignore this email — your password has not changed.
-                """.formatted(link, props.resetTokenMinutes()));
+                This link expires in %d minutes and works once. If this wasn't you, ignore this
+                email — your password has not changed.%s
+                """.formatted(props.name(), link("/reset-password", token), props.resetTokenMinutes(),
+                requestContext(requestedBy)));
     }
 
-    @Async
-    public void sendPasswordChangedNotice(String to) {
-        send(to, "Your password was changed",
-                """
-                Your account password was just changed and all other sessions were signed out.
+    /** Sent to the NEW address: clicking proves the requester controls it. */
+    public void sendEmailChangeConfirmation(String newAddress, String token) {
+        send(newAddress, "Confirm your new email address", """
+                Confirm that this should become the email address of your %s account:
 
-                If this was you, no action is needed. If it wasn't, reset your password
-                immediately using the "Forgot password" link.
-                """);
+                %s
+
+                This link expires in %d hours. If you didn't ask for this, ignore this email.
+                """.formatted(props.name(), link("/confirm-email", token), props.emailChangeTokenHours()));
     }
+
+    /**
+     * A change to how the account can be signed in to. Every such change notifies the
+     * owner, so an account taken over is at least an account whose owner was told.
+     */
+    public void sendSecurityNotice(String to, String subject, String what) {
+        send(to, subject, """
+                %s
+                %s
+                If this was you, no action is needed. If it wasn't, reset your password now:
+                %s/forgot-password
+                """.formatted(what, requestContext(ClientInfo.current()), props.baseUrl()));
+    }
+
+    public void sendNewSignInAlert(String to, String ip, String userAgent, Instant when) {
+        send(to, "New sign-in to your account", """
+                Your %s account was just signed in to from a device or network we haven't seen recently.
+
+                  When:   %s
+                  From:   %s
+                  Device: %s
+
+                If this was you, no action is needed. If it wasn't, change your password and
+                sign out other sessions from your account settings:
+                %s/account
+                """.formatted(props.name(), WHEN.format(when), orUnknown(ip), orUnknown(userAgent),
+                props.baseUrl()));
+    }
+
+    // ----------------------------------------------------------------- helpers
 
     private void send(String to, String subject, String body) {
-        try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(props.mailFrom());
-            message.setTo(to);
-            message.setSubject(subject);
-            message.setText(body);
-            mailSender.send(message);
-        } catch (Exception e) {
-            // Deliberately swallowed: mail failures are logged, never surfaced to the
-            // caller — the enumeration-safe endpoints reply identically either way.
-            log.error("Failed to send '{}' email", subject, e);
+        // The cap is per recipient and silent: a suppressed send must look exactly like a
+        // sent one, or the limiter becomes an account-enumeration oracle.
+        if (limiter.allowSend(to)) {
+            sender.send(to, "[" + props.name() + "] " + subject, body);
         }
+    }
+
+    private String link(String path, String token) {
+        return props.baseUrl() + path + "#token=" + token;
+    }
+
+    /** "When / from / device" lines for a notice. */
+    private static String requestContext(ClientInfo client) {
+        if (client == null || client.ip() == null) {
+            return "";
+        }
+        return """
+
+                  When:   %s
+                  From:   %s
+                  Device: %s
+                """.formatted(WHEN.format(Instant.now()), client.ip(), orUnknown(client.userAgent()));
+    }
+
+    private static String orUnknown(String value) {
+        return value == null || value.isBlank() ? "unknown" : value;
     }
 }

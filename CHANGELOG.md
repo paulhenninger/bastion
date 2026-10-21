@@ -1,20 +1,83 @@
 # Changelog
 
+## 2.0.0 — 2026-10-21
+
+A security-focused major release. **Upgrading signs every user out once** and
+requires a new `DATA_ENCRYPTION_KEY` — see
+[docs/operations.md](docs/operations.md#upgrading-from-1x).
+
+### Security fixes (1.x was affected)
+
+- **Account pre-hijacking.** Someone who registered a victim's address before
+  them could end up with the account once the victim verified. Verification now
+  requires the password chosen at signup and applies the one proven.
+- **Single-use tokens could be used twice** under concurrent requests;
+  **a refresh token could fork into two sessions**. Consumption is now atomic
+  (conditional updates, row locks).
+- **Access tokens survived logout, password change and lock** for up to 15
+  minutes. Every request now checks the session.
+- **Tokens in URL query strings** could leak through proxy logs and `Referer`.
+  Emailed links now use the URL fragment.
+- **Timing differences** on signup and forgot-password revealed which addresses
+  had accounts. Work is now equalised or asynchronous.
+- **Passwords over 72 bytes** caused a 500 (BCrypt). Now Argon2id.
+- **Malformed requests** returned 500, and **unbounded request bodies** could
+  exhaust memory. Now 4xx, and a 64 KiB cap.
+- **A dev admin password was printed to the log** whenever the `prod` profile
+  wasn't set, as was Spring Boot's generated default password. Both are gone.
+- **Change-password had no attempt limit**, so a stolen access token could
+  brute-force the password. Re-authentication is now budgeted per account.
+- The Docker build failed on Windows checkouts (CRLF in `gradlew`).
+
+### Added
+
+- TOTP two-factor authentication with recovery codes; TOTP secrets encrypted
+  at rest (AES-256-GCM)
+- Passkeys (WebAuthn) for passwordless sign-in and re-authentication
+- Sessions list with per-device sign-out; idle and absolute session lifetimes
+- Sudo mode (step-up re-authentication) for sensitive changes
+- Breached-password check (Have I Been Pwned, k-anonymity)
+- Per-account login throttling, per-account code budgets, per-recipient mail cap
+- Disposable-domain, TLD and MX checks on new addresses; optional Turnstile CAPTCHA
+- Verified email change; account deletion; personal data export
+- Security event log (admin viewer + per-user activity) and `bastion.audit` logger
+- Security notification emails and new-device sign-in alerts
+- Admin: search, user detail, sign-out-everywhere, 2FA reset, signups switch;
+  admin API requires a two-factor session; every mutation requires sudo
+- First admin via `BOOTSTRAP_ADMIN_EMAIL` (no default credentials)
+- Actuator health probes and Prometheus metrics on a private management port
+- Structured JSON logging (`prod` profile), `X-Request-Id` correlation
+- Strict CSP and full browser security header set; non-root containers
+- Test suite grown from 15 to 68 tests, including real WebAuthn ceremonies and
+  migrations on real MySQL
+- CI: CodeQL, SpotBugs + find-sec-bugs, dependency review, `npm audit`
+- Documentation: security model, configuration, API, operations, security policy
+
+### Changed
+
+- Passwords hashed with Argon2id (BCrypt upgraded at next sign-in); minimum length 12
+- Refresh cookie is `SameSite=Strict`; refresh and logout require `X-Bastion-Client`
+- `POST /auth/verify-email` replaces `GET` and takes `{token, password}`
+- Password change keeps the current session and ends the others
+- Timestamps are `DATETIME(6)` in UTC (no 2038 limit)
+- `REFRESH_TOKEN_DAYS` replaced by `SESSION_IDLE_DAYS` / `SESSION_MAX_DAYS`
+- `/profile` is now `/account`
+
+### Removed
+
+- The seeded development admin account
+
 ## 1.0.0 — 2026-08-08
 
 Initial release.
 
 - Spring Boot 4.1 (Spring Framework 7) / Java 25 backend; React 19 + Vite 8 +
-  TypeScript SPA — every dependency on its current major
+  TypeScript SPA
 - Sessions: 15-min HS256 access tokens (in-memory in the SPA) + rotating
-  opaque refresh tokens (HttpOnly SameSite=Lax cookie, SHA-256 at rest)
+  opaque refresh tokens (HttpOnly cookie, SHA-256 at rest)
 - Refresh-token theft detection with a two-tab grace window
 - Signup with email verification; password reset via emailed single-use link;
-  change password — all destructive paths revoke every session
+  change password
 - Enumeration-safe signup/recovery flows; constant-shape login
-- USER/ADMIN roles, paginated admin user management (promote, lock, delete)
-  with server-side self-targeting guards
-- Per-IP auth rate limiting with a bounded in-memory table
-- Flyway schema, Mailpit dev mail catcher, Docker Compose stack, GitHub
-  Actions CI
-- 15 backend tests including the full auth flow end-to-end through MockMvc
+- USER/ADMIN roles, paginated admin user management
+- Per-IP auth rate limiting; Flyway schema; Mailpit; Docker Compose; CI
