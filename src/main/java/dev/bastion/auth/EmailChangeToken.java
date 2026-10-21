@@ -10,17 +10,18 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 import java.time.Instant;
 
 /**
- * A refresh token row. The token itself is a 256-bit opaque value delivered as an
- * HttpOnly cookie; only its SHA-256 hash is stored, so a database leak does not
- * leak usable sessions.
+ * A pending email change, emailed to the <em>new</em> address: the change takes effect
+ * only when someone who reads that inbox clicks the link. Stored hashed.
  */
 @Entity
-@Table(name = "refresh_tokens")
-public class RefreshToken {
+@Table(name = "email_change_tokens")
+public class EmailChangeToken {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -28,7 +29,11 @@ public class RefreshToken {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id")
+    @OnDelete(action = OnDeleteAction.CASCADE)
     private User user;
+
+    @Column(name = "new_email", nullable = false, length = 255)
+    private String newEmail;
 
     @Column(name = "token_hash", nullable = false, unique = true, length = 64)
     private String tokenHash;
@@ -36,12 +41,8 @@ public class RefreshToken {
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 
-    @Column(name = "revoked_at")
-    private Instant revokedAt;
-
-    /** Hash of the token that replaced this one on rotation — the reuse-detection breadcrumb. */
-    @Column(name = "replaced_by_hash", length = 64)
-    private String replacedByHash;
+    @Column(name = "used_at")
+    private Instant usedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -49,13 +50,12 @@ public class RefreshToken {
     public Long getId() { return id; }
     public User getUser() { return user; }
     public void setUser(User user) { this.user = user; }
+    public String getNewEmail() { return newEmail; }
+    public void setNewEmail(String newEmail) { this.newEmail = newEmail; }
     public String getTokenHash() { return tokenHash; }
     public void setTokenHash(String tokenHash) { this.tokenHash = tokenHash; }
     public Instant getExpiresAt() { return expiresAt; }
     public void setExpiresAt(Instant expiresAt) { this.expiresAt = expiresAt; }
-    public Instant getRevokedAt() { return revokedAt; }
-    public void setRevokedAt(Instant revokedAt) { this.revokedAt = revokedAt; }
-    public String getReplacedByHash() { return replacedByHash; }
-    public void setReplacedByHash(String replacedByHash) { this.replacedByHash = replacedByHash; }
+    public Instant getUsedAt() { return usedAt; }
     public Instant getCreatedAt() { return createdAt; }
 }

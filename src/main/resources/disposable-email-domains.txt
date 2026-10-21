@@ -1,0 +1,91 @@
+# Throwaway / disposable mail providers refused at signup.
+#
+# Deliberately a short curated list of the high-traffic services rather than one
+# of the 100k-entry lists published online: those carry false positives (small
+# real providers and university forwarders get swept in), they go stale in both
+# directions, and a signup refused in error is a user who cannot create an
+# account at all. Anything not listed here is still gated by the MX check.
+#
+# Lines are lowercase domains; blank lines and # comments are ignored. Matching
+# includes subdomains, so "mailinator.com" also covers "team.mailinator.com".
+
+0-mail.com
+10minutemail.com
+10minutemail.net
+20minutemail.com
+33mail.com
+temp-mail.org
+temp-mail.io
+tempmail.com
+tempmail.net
+tempmailo.com
+tempr.email
+throwawaymail.com
+guerrillamail.com
+guerrillamail.net
+guerrillamail.org
+guerrillamail.biz
+guerrillamail.de
+grr.la
+sharklasers.com
+spam4.me
+mailinator.com
+mailinator.net
+mailinator2.com
+sogetthis.com
+suremail.info
+maildrop.cc
+mailnesia.com
+mailcatch.com
+mintemail.com
+mytemp.email
+mohmal.com
+getnada.com
+nada.email
+inboxkitten.com
+yopmail.com
+yopmail.net
+yopmail.fr
+cool.fr.nf
+jetable.fr.nf
+trashmail.com
+trashmail.de
+trashmail.net
+trash-mail.com
+wegwerfmail.de
+wegwerfmail.net
+byom.de
+discard.email
+discardmail.com
+dispostable.com
+emailondeck.com
+fakeinbox.com
+fakemailgenerator.com
+getairmail.com
+harakirimail.com
+incognitomail.com
+mailexpire.com
+meltmail.com
+mytrashmail.com
+no-spam.ws
+spambog.com
+spamgourmet.com
+spamhole.com
+tempinbox.com
+tempomail.fr
+tempemail.net
+tmail.ws
+tmpmail.net
+anonbox.net
+anonymbox.com
+burnermail.io
+correotemporal.org
+easytrashmail.com
+mailtemp.info
+minuteinbox.com
+moakt.com
+mail-temp.com
+linshiyouxiang.net
+rootfest.net
+vomoto.com
+vpn.st

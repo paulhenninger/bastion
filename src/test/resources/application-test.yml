@@ -6,6 +6,7 @@ spring:
     driver-class-name: org.h2.Driver
   jpa:
     hibernate:
+      # H2 can't run the MySQL migrations; MigrationTest runs them on real MySQL.
       ddl-auto: create-drop
   flyway:
     enabled: false
@@ -13,13 +14,26 @@ spring:
     host: localhost
     port: 3025
 
+management:
+  server:
+    port: -1
+
 app:
-  security:
-    auth-requests-per-window: 10000
   jwt-secret: dGVzdC1zZWNyZXQtbXVzdC1iZS0yNTYtYml0cy1sb25nISE=
-  access-token-minutes: 15
-  refresh-token-days: 30
   base-url: http://localhost:5173
   mail-from: Bastion Test <test@bastion.local>
-  verification-token-hours: 24
-  reset-token-minutes: 30
+  encryption:
+    key: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+  security:
+    # Per-class opt-in (see RateLimitingIntegrationTest): otherwise the shared
+    # in-memory budgets would make tests depend on each other's order.
+    rate-limits-enabled: false
+  passwords:
+    min-length: 12
+    breach-check: false
+  signup:
+    check-mx: false
+  session:
+    new-sign-in-alerts: true
+  admin:
+    bootstrap-email: boss@example.com

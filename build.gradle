@@ -2,10 +2,13 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '4.1.1'
     id 'io.spring.dependency-management' version '1.1.7'
+    // Static analysis on the compiled bytecode, with find-sec-bugs for the
+    // security rules. Advisory: it reports in CI and never fails the build.
+    id 'com.github.spotbugs' version '6.5.13'
 }
 
 group = 'dev.bastion'
-version = '1.0.0'
+version = '2.0.0'
 
 java {
     toolchain {
@@ -23,6 +26,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-mail'
+    // Health probes and Prometheus metrics, served on a separate management port.
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 
     // Boot 4 modularization: Flyway auto-configuration lives in its own starter.
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
@@ -33,10 +39,26 @@ dependencies {
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.13.0'
 
+    // Passkeys (WebAuthn). 0.31 is on Jackson 3, matching Boot 4.
+    implementation 'com.webauthn4j:webauthn4j-core:0.31.11.RELEASE'
+    // webauthn4j's API carries JetBrains nullability annotations; javac needs them to resolve overloads.
+    compileOnly 'org.jetbrains:annotations:26.1.0'
+    // Argon2id password hashing (Spring Security's Argon2PasswordEncoder needs it).
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.86'
+
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation 'org.awaitility:awaitility'
+    testImplementation 'com.webauthn4j:webauthn4j-test:0.31.11.RELEASE'
+    // Runs the real Flyway migrations against real MySQL (skipped without Docker).
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+    testImplementation 'org.testcontainers:testcontainers-mysql'
     testRuntimeOnly 'com.h2database:h2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    spotbugsPlugins 'com.h3xstream.findsecbugs:findsecbugs-plugin:1.14.0'
 }
 
 tasks.named('test') {
@@ -46,3 +68,20 @@ tasks.named('test') {
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs << '-Xlint:deprecation'
 }
+
+spotbugs {
+    effort = com.github.spotbugs.snom.Effort.valueOf('MAX')
+    reportLevel = com.github.spotbugs.snom.Confidence.valueOf('MEDIUM')
+    excludeFilter = file('config/spotbugs/exclude.xml')
+    ignoreFailures = true
+}
+
+tasks.named('spotbugsMain') {
+    reports {
+        html.required = true
+        xml.required = true
+    }
+}
+
+// Nothing is learned from analysing test bytecode, and it doubles the runtime.
+tasks.named('spotbugsTest') { enabled = false }

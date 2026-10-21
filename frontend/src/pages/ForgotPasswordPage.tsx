@@ -1,22 +1,27 @@
-import { useState, type FormEvent } from 'react';
+import { useCallback, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { forgotPassword } from '../api/auth';
-import { ApiError } from '../api/client';
+import { messageOf } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
+import { Turnstile } from '../components/Turnstile';
 
 export default function ForgotPasswordPage() {
+  const { config } = useAuth();
   const [email, setEmail] = useState('');
+  const [captcha, setCaptcha] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const onCaptcha = useCallback((token: string | null) => setCaptcha(token), []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
     setBusy(true);
     try {
-      setNotice(await forgotPassword(email));
+      setNotice(await forgotPassword(email, captcha));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not reach the server');
+      setError(messageOf(err));
     } finally {
       setBusy(false);
     }
@@ -38,18 +43,17 @@ export default function ForgotPasswordPage() {
           )}
           <form onSubmit={handleSubmit}>
             <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <button type="submit" disabled={busy}>
+            <input id="email" type="email" autoComplete="email" required value={email}
+                   onChange={(e) => setEmail(e.target.value)} />
+            {config?.turnstileSiteKey && <Turnstile siteKey={config.turnstileSiteKey} onToken={onCaptcha} />}
+            <button type="submit" disabled={busy || (!!config?.turnstileSiteKey && !captcha)}>
               {busy ? 'Sending…' : 'Email me a reset link'}
             </button>
           </form>
+          <p className="hint">
+            Resetting your password doesn't turn off two-factor authentication — you'll still need your
+            authenticator or a recovery code to sign in.
+          </p>
         </>
       )}
       <p className="auth-links">

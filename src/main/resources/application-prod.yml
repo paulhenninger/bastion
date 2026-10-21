@@ -1,0 +1,13 @@
+# Activated with SPRING_PROFILES_ACTIVE=prod.
+
+logging:
+  structured:
+    format:
+      # One JSON object per line (Elastic Common Schema) — ready for Loki,
+      # Elasticsearch, CloudWatch, Datadog, etc. MDC fields (requestId, userId)
+      # come along automatically.
+      console: ${LOG_FORMAT:ecs}
+
+spring:
+  jpa:
+    show-sql: false

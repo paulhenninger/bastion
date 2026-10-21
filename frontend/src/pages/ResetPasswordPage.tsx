@@ -1,16 +1,18 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { resetPassword } from '../api/auth';
-import { ApiError } from '../api/client';
+import { Link } from 'react-router-dom';
+import { resetPassword, takeTokenFromFragment } from '../api/auth';
+import { messageOf } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 
 export default function ResetPasswordPage() {
-  const [params] = useSearchParams();
-  const token = params.get('token') ?? '';
+  const { config } = useAuth();
+  const [token] = useState(takeTokenFromFragment);
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const minLength = config?.passwordMinLength ?? 12;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -23,7 +25,7 @@ export default function ResetPasswordPage() {
     try {
       setNotice(await resetPassword(token, password));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not reach the server');
+      setError(messageOf(err));
     } finally {
       setBusy(false);
     }
@@ -34,7 +36,7 @@ export default function ResetPasswordPage() {
       <div className="card auth-card">
         <h1>Reset your password</h1>
         <p className="alert alert-error" role="alert">
-          This link is missing its token. Request a new one from the sign-in page.
+          This link is missing its token. Request a new one.
         </p>
         <p className="auth-links">
           <Link to="/forgot-password">Request a new link</Link>
@@ -62,26 +64,14 @@ export default function ResetPasswordPage() {
               {error}
             </p>
           )}
+          <p className="hint">This signs you out on every device.</p>
           <form onSubmit={handleSubmit}>
-            <label htmlFor="password">New password (at least 8 characters)</label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="new-password"
-              required
-              minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <label htmlFor="password">New password (at least {minLength} characters)</label>
+            <input id="password" type="password" autoComplete="new-password" required minLength={minLength}
+                   value={password} onChange={(e) => setPassword(e.target.value)} />
             <label htmlFor="confirm">Repeat new password</label>
-            <input
-              id="confirm"
-              type="password"
-              autoComplete="new-password"
-              required
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-            />
+            <input id="confirm" type="password" autoComplete="new-password" required value={confirm}
+                   onChange={(e) => setConfirm(e.target.value)} />
             <button type="submit" disabled={busy}>
               {busy ? 'Saving…' : 'Set new password'}
             </button>

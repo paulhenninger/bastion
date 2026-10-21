@@ -19,8 +19,8 @@ export function NavBar() {
         {user ? (
           <>
             <NavLink to="/">Dashboard</NavLink>
-            <NavLink to="/profile">Profile</NavLink>
-            {user.role === 'ADMIN' && <NavLink to="/admin">Users</NavLink>}
+            <NavLink to="/account">Account</NavLink>
+            {user.role === 'ADMIN' && <NavLink to="/admin">Admin</NavLink>}
             <button type="button" className="link-button" onClick={handleSignOut}>
               Sign out
             </button>
