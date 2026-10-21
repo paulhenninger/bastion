@@ -62,13 +62,14 @@ class MySqlMigrationTest {
         Flyway.configure().dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())
                 .target("1").load().migrate();
         try (var c = DriverManager.getConnection(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword());
-             var s = c.createStatement()) {
-            String bcrypt = new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder()
-                    .encode("legacy-user-password");
-            s.executeUpdate("insert into users (email, password_hash, enabled, created_at, updated_at) values "
-                    + "('legacy@example.com', '" + bcrypt + "', true, '2026-08-01 12:00:00', '2026-08-01 12:00:00')");
-            s.executeUpdate("insert into refresh_tokens (user_id, token_hash, expires_at) values "
-                    + "(1, repeat('a', 64), '2026-12-01 00:00:00')");
+             var user = c.prepareStatement("insert into users (email, password_hash, enabled, created_at, updated_at) "
+                     + "values ('legacy@example.com', ?, true, '2026-08-01 12:00:00', '2026-08-01 12:00:00')");
+             var token = c.prepareStatement("insert into refresh_tokens (user_id, token_hash, expires_at) "
+                     + "values (1, repeat('a', 64), '2026-12-01 00:00:00')")) {
+            user.setString(1, new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder()
+                    .encode("legacy-user-password"));
+            user.executeUpdate();
+            token.executeUpdate();
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }

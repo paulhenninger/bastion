@@ -79,17 +79,19 @@ public class SecurityEvents {
         try {
             // Read here, on the request thread: the writer runs on another one.
             ClientInfo client = ClientInfo.current();
+            String ip = clean(client.ip());
+            String safeDetail = cut(clean(detail), MAX_DETAIL);
             SecurityEvent event = new SecurityEvent(Instant.now(), type, userId, cut(email, MAX_EMAIL),
-                    actorId, client.ip(), client.userAgent(), cut(clean(detail), MAX_DETAIL));
+                    actorId, ip, client.userAgent(), safeDetail);
             meters.counter("bastion.security.events", "type", type.name()).increment();
             // Key-values become fields in structured (JSON) logs; the message stays readable as text.
             audit.atInfo()
                     .addKeyValue("event", type.name())
                     .addKeyValue("userId", userId)
                     .addKeyValue("actorId", actorId)
-                    .addKeyValue("ip", client.ip())
+                    .addKeyValue("ip", ip)
                     .log("security_event type={} userId={} actorId={} ip={} detail={}",
-                            type, userId, actorId, client.ip(), event.getDetail());
+                            type, userId, actorId, ip, safeDetail);
             writer.write(event);
         } catch (RuntimeException e) {
             log.warn("Could not record security event {}: {}", type, e.toString());
@@ -105,8 +107,9 @@ public class SecurityEvents {
         return repository.purgeOlderThan(Instant.now().minus(retention));
     }
 
+    /** One line, no control characters: nothing a caller sends can forge a log entry. */
     private static String clean(String value) {
-        return value == null ? null : value.replaceAll("\\p{Cntrl}", " ");
+        return value == null ? null : value.replaceAll("[\\r\\n\\p{Cntrl}]", " ");
     }
 
     private static String cut(String value, int max) {
