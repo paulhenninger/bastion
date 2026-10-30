@@ -42,6 +42,9 @@ pkg_path=$(echo "$pkg" | tr . /)
 
 echo "Renaming: name=$name package=$pkg display=\"$display\" class=${pascal}Application"
 
+# 0. Bastion's own brand assets (feature graphic, fonts) are not yours.
+rm -rf brand
+
 # 1. Move the Java sources into the new package.
 for root in src/main/java src/test/java; do
   mkdir -p "$root/$pkg_path"
