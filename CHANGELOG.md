@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Java 25.0.5** (Temurin, the October 2026 security update) in both stages
+  of the backend image (was 25.0.4.1).
+
 ## 2.1.0 — 2026-10-30
 
 ### Runtime versions (all on current long-term-support lines)
