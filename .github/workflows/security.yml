@@ -55,6 +55,15 @@ jobs:
         with:
           persist-credentials: false
 
+      # Compose refuses to read the file at all without the two keys; throwaway ones.
+      - name: Throwaway keys
+        run: |
+          {
+            echo "JWT_SECRET=$(openssl rand -base64 32)"
+            echo "DATA_ENCRYPTION_KEY=$(openssl rand -base64 32)"
+            echo "APP_BASE_URL=http://localhost:8081"
+          } > .env
+
       - name: Build both images
         # --pull: judge this week's base-image fixes, not a cached layer's.
         run: docker compose --profile full build --pull
@@ -74,11 +83,6 @@ jobs:
 
       - name: Start the hardened stack
         run: |
-          {
-            echo "JWT_SECRET=$(openssl rand -base64 32)"
-            echo "DATA_ENCRYPTION_KEY=$(openssl rand -base64 32)"
-            echo "APP_BASE_URL=http://localhost:8081"
-          } > .env
           if ! docker compose --profile full up -d --no-build --wait --wait-timeout 300; then
             docker compose --profile full ps -a
             docker compose --profile full logs --tail 200
