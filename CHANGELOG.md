@@ -41,6 +41,17 @@
 - Dependabot now proposes base-image updates (they are digest-pinned, so it's
   the only way they move).
 
+### Scaffolding
+
+- `scripts/rename-project.sh <name> <package> "<Display Name>"` renames the
+  whole template in one pass (package, classes, cookies, CSRF header, metrics,
+  audit logger, database and logins, images, UI) and leaves migrations alone.
+- `docs/scaffolding.md`: from an empty folder to a deployed product — rename,
+  customize, build features safely, trim, deploy, take upstream fixes.
+- `docs/ai-customization-prompt.md`: a prompt for an AI coding assistant that
+  interviews you, then does the above and verifies it. `AGENTS.md`/`CLAUDE.md`
+  carry the rules into every later session.
+
 ### Upgrading from 2.0
 
 - `.env`: set `DB_USER=bastion_app`, `DB_PASS`, `SPRING_FLYWAY_USER=bastion_owner`,
