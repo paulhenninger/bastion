@@ -117,6 +117,8 @@ two-factor authentication or a passkey first — that's on purpose.
 
 | Document | What's in it |
 |---|---|
+| [docs/scaffolding.md](docs/scaffolding.md) | **Start your own project from Bastion**: rename, customize, build, deploy |
+| [docs/ai-customization-prompt.md](docs/ai-customization-prompt.md) | The same, done by an AI assistant that interviews you first |
 | [docs/security-model.md](docs/security-model.md) | Threats, controls, the tests that prove them, residual risks |
 | [docs/configuration.md](docs/configuration.md) | Every environment variable |
 | [docs/api.md](docs/api.md) | Every endpoint, error codes, rate limits |
@@ -150,14 +152,22 @@ frontend/nginx/ production nginx config and security headers
 
 ## Make it yours
 
-1. **Rename**: search-and-replace `dev.bastion` / `bastion` / `Bastion`, set
-   `APP_NAME`, rename the cookie (`AuthController.REFRESH_COOKIE`), retitle
-   `index.html`, swap the CSS tokens at the top of `frontend/src/styles.css`.
-2. **Build your product** in `DashboardPage` and new backend packages beside
-   `auth/`. New endpoints are authenticated by default; take the caller with
-   `@AuthenticationPrincipal AuthPrincipal me`, and call `reauth.require(me)`
-   before anything a session thief would want to do.
-3. **Ship it**: follow the [production checklist](docs/operations.md#production-checklist).
+```bash
+sh scripts/rename-project.sh acme com.example.acme "Acme"   # package, cookies, DB, images, UI — all of it
+./gradlew build                                             # still green
+```
+
+Then swap the CSS tokens in `frontend/src/styles.css`, build your product in
+`DashboardPage` and new packages beside `auth/` (authenticated by default; call
+`reauth.require(me)` before anything a session thief would want), and ship with
+the [production checklist](docs/operations.md#production-checklist). The full
+walk-through is [docs/scaffolding.md](docs/scaffolding.md).
+
+**With an AI assistant** (Claude Code, Cursor, Copilot…): open your copy and
+say *"Read `docs/ai-customization-prompt.md` and follow it."* It asks about your
+product, renames and trims the template, builds a first feature with tests, and
+runs every check — without loosening any security control. `AGENTS.md` /
+`CLAUDE.md` keep later sessions on the same rules.
 
 ## License
 
