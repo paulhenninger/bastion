@@ -18,6 +18,14 @@ and is skipped when Docker isn't available. CI always runs it.
 
 Reports: `build/reports/tests/test/index.html`, `build/reports/spotbugs/main.html`.
 
+Containers — build, start and prove the hardening (what the Security workflow
+runs; needs Docker, best on Linux, see docs/operations.md):
+
+```bash
+docker compose --profile full up -d --build --wait
+sh scripts/verify-stack.sh
+```
+
 ## Expectations for a pull request
 
 - **A test for every security property you add or change**, ideally one that

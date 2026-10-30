@@ -68,13 +68,24 @@ administration, audit logging and monitoring.
   `Permissions-Policy`, `no-referrer`
 - Request body cap, uniform JSON errors (no stack traces, no 500s for bad input)
 - TOTP secrets encrypted at rest (AES-256-GCM); every token stored hashed
-- Non-root containers, nginx that resets `X-Forwarded-For`, actuator never proxied
+- Refuses to start a real deployment on development settings (http, published
+  database passwords, a shared key)
+
+**Containers & supply chain**
+- Every container non-root, **read-only**, all capabilities dropped,
+  `no-new-privileges`, memory/PID-capped; segmented networks (the web container
+  can't reach the database, only the app reaches the internet)
+- MySQL with TLS required and **two logins**: the app can only read and write
+  rows; migrations run as a separate owner; root can't sign in over the network
+- Base images and GitHub Actions pinned by digest/SHA; Trivy (images + npm),
+  gitleaks, and a CI smoke test that proves all of the above on the running stack
 
 **Quality**
-- 76 backend tests: full flows through MockMvc, real WebAuthn ceremonies against
+- 80 backend tests: full flows through MockMvc, real WebAuthn ceremonies against
   an emulated authenticator, RFC 6238 test vectors, and the real Flyway migrations
   on real MySQL (Testcontainers)
 - CI: tests, SpotBugs + find-sec-bugs, CodeQL, dependency review, `npm audit`,
+  Trivy, gitleaks, a hardened-stack smoke test,
   Dependabot
 
 ## Quickstart

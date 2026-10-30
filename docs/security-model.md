@@ -110,8 +110,12 @@ without `DATA_ENCRYPTION_KEY`, which is kept outside the database.
 | IP spoofing to evade limits | `X-Forwarded-For` trusted only when configured, and nginx *resets* it; non-IP values ignored | e2e |
 | Log injection | Control characters stripped from user agents and event details; request ids validated | — |
 | Exposed metrics / health | Actuator on a separate port that nginx never proxies | e2e (404 through nginx) |
-| Container escape impact | Both images run as non-root users | e2e |
-| Vulnerable dependencies | Dependabot, `dependency-review` on PRs, `npm audit`, CodeQL, SpotBugs + find-sec-bugs | CI |
+| Container escape impact | Non-root users, read-only root filesystems, every capability dropped, `no-new-privileges`, memory/PID limits | `scripts/verify-stack.sh` (CI) |
+| Lateral movement after an app compromise | Segmented networks (web can't reach the DB; only the app reaches the internet); the app's DB login can only read/write rows, never DDL or other schemas; DB root only from inside its container; DB TLS required | `scripts/verify-stack.sh` (CI) |
+| Deploying on development defaults | `DeploymentSafetyCheck` refuses `http://`, published DB passwords and a shared key once `APP_BASE_URL` names a real host | `DeploymentSafetyCheckTest` |
+| Secrets in query strings reaching logs | Emailed tokens live in the URL fragment; nginx logs paths without query strings | `scripts/verify-stack.sh` (CI) |
+| Vulnerable dependencies | Dependabot (digest-pinned images included), `dependency-review` on PRs, `npm audit`, Trivy on both images and the npm lockfile (daily), CodeQL, SpotBugs + find-sec-bugs | CI |
+| Supply-chain tampering | Base images pinned by digest, GitHub Actions pinned by commit SHA, Gradle distribution checksum-verified, scanners run from digest-pinned images; gitleaks over all history | CI |
 | Schema drift | Flyway migrations run on real MySQL and validated against the entities in CI | `MySqlMigrationTest` |
 | Data loss on DB theft | See *Assets* | `MfaIntegrationTest.totpSecretsAreEncryptedAtRest`, `SecurityPrimitivesTest.cipher…` |
 

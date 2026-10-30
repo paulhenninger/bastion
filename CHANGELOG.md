@@ -16,6 +16,44 @@
 - Every GitHub Action is pinned to a commit SHA; checkouts no longer keep the
   token. Dependabot never proposes a non-LTS Java, Node or MySQL major.
 
+### Container and supply-chain hardening
+
+- **Every container** runs as a non-root user on a read-only root filesystem
+  with all Linux capabilities dropped, `no-new-privileges`, memory and PID
+  limits and rotated logs. Networks are segmented: the web container can't
+  reach the database, and only the app can reach the internet.
+- **Two database logins** (`db/roles.sql`, applied by a `db-roles` Compose
+  service): the app runs as `bastion_app` (rows only) and migrates as
+  `bastion_owner` via `SPRING_FLYWAY_USER`/`SPRING_FLYWAY_PASSWORD`. MySQL
+  requires TLS, root signs in only from inside its container, `local_infile`
+  and the X protocol are off.
+- **The app refuses to start a real deployment on development settings**
+  (`DeploymentSafetyCheck`): an `http://` base URL, an empty or published
+  database password, or `JWT_SECRET` equal to `DATA_ENCRYPTION_KEY`.
+- Images: base images pinned by digest and upgraded at build; Alpine JRE with
+  a layered Spring Boot app; health checks in both images; nginx runs without
+  its start-up scripts (read-only safe), logs paths without query strings,
+  believes `X-Forwarded-For` only from proxies listed in `trusted-proxies.conf`,
+  and sends HSTS.
+- CI (`security.yml`, also daily): gitleaks over the whole history, Trivy on
+  both images and the npm lockfile, then the stack is started and
+  `scripts/verify-stack.sh` proves every control above holds.
+- Dependabot now proposes base-image updates (they are digest-pinned, so it's
+  the only way they move).
+
+### Upgrading from 2.0
+
+- `.env`: set `DB_USER=bastion_app`, `DB_PASS`, `SPRING_FLYWAY_USER=bastion_owner`,
+  `SPRING_FLYWAY_PASSWORD` (see `.env.example`). The Compose service is now
+  `db` (was `mysql`). For an existing dev volume, `docker compose up` creates
+  the two logins; or start fresh with `docker compose down -v`.
+- Production: run `db/roles.sql` as an administrator and switch the app to the
+  two logins. If `APP_BASE_URL` is a real host, the app now refuses to start on
+  the settings listed above — fix them rather than setting
+  `ALLOW_DEVELOPMENT_SETTINGS`.
+- nginx: `default.conf` is replaced by a full `nginx.conf`. Behind a load
+  balancer, mount a `trusted-proxies.conf` listing it.
+
 ## 2.0.1 — 2026-10-21
 
 Fixes from a full black-box security and usability verification of 2.0.0

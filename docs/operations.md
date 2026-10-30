@@ -18,8 +18,21 @@ backups and scaling.
       load balancer), make the *outermost* one reset it.
 - [ ] **Management port (9091) is private** — reachable by Prometheus and the
       orchestrator only, never through the public proxy.
-- [ ] **Database**: TLS (`DB_PARAMS=&sslMode=VERIFY_IDENTITY`), a dedicated
-      least-privilege user, encrypted backups.
+- [ ] **Database**: TLS (`DB_PARAMS=&sslMode=VERIFY_IDENTITY`), encrypted
+      backups, and two logins from [`db/roles.sql`](../db/roles.sql): the app
+      runs as `bastion_app` (rows only) and migrates as `bastion_owner`
+      (`SPRING_FLYWAY_USER`/`SPRING_FLYWAY_PASSWORD`). Never run the app as root.
+- [ ] **No development settings.** The app refuses to start when `APP_BASE_URL`
+      names a real host but the URL is `http://`, a database password is one of the
+      published defaults, or the two keys are equal (`DeploymentSafetyCheck`).
+      `ALLOW_DEVELOPMENT_SETTINGS` must be unset.
+- [ ] **Containers run as Compose runs them**: read-only root filesystem with a
+      `/tmp` tmpfs, `cap_drop: ALL`, `no-new-privileges`, memory and PID limits,
+      and the database on a network the web container can't reach. Run
+      [`scripts/verify-stack.sh`](../scripts/verify-stack.sh) against your stack.
+- [ ] **Trusted proxies**: behind a load balancer, mount a
+      `trusted-proxies.conf` naming only its address into the web container
+      (see that file), so per-IP limits see real clients.
 - [ ] **Mail**: a real relay with `MAIL_SMTP_AUTH=true` and `MAIL_STARTTLS=true`;
       SPF, DKIM and DMARC (`p=reject` once verified) on the sending domain.
 - [ ] `SPRING_PROFILES_ACTIVE=prod` (structured JSON logs).
@@ -47,9 +60,28 @@ Internet ──TLS──▶ edge proxy / load balancer  (HSTS, resets X-Forwarde
                  MySQL 9.7 LTS (TLS)        SMTP relay (STARTTLS)
 ```
 
-Both containers run as non-root users. The app image needs no write access to
-its filesystem; run it with a read-only root filesystem if your platform allows
-(`docker run --read-only --tmpfs /tmp`).
+## Container hardening
+
+`docker-compose.yml` is the reference for how the images must run; CI starts it
+and runs [`scripts/verify-stack.sh`](../scripts/verify-stack.sh), which fails
+unless every item below holds.
+
+| Control | Where |
+|---|---|
+| Base images pinned by version **and digest**; Alpine packages upgraded at build; Dependabot proposes new pins | Both Dockerfiles, `.github/dependabot.yml` |
+| Fixable HIGH/CRITICAL vulnerabilities in OS packages, jars or npm lockfile fail the build (Trivy), daily as well as per PR | `.github/workflows/security.yml`, `.trivyignore` |
+| No secret anywhere in git history (gitleaks) | same, `.gitleaks.toml` |
+| Every container: non-root user, read-only root filesystem, `cap_drop: ALL`, `no-new-privileges`, memory + PID limits, rotated logs | `x-hardened` in Compose |
+| Network segmentation: web ↔ app ↔ db on `internal` networks; only the app has a route out; web can't reach the database | Compose `networks:` |
+| MySQL: TLS required, root only from inside its container, `local_infile` off, X protocol off, no DNS-based accounts | Compose `db.command` |
+| Two database logins: app = rows only, owner = DDL for migrations | `db/roles.sql` |
+| Access log without query strings; `X-Forwarded-For` believed only from listed proxies; HSTS; `/healthz` | `frontend/nginx/` |
+| Health checks in both images (`/actuator/health/liveness`, `/healthz`) | Dockerfiles |
+| Layered Spring Boot image, JVM exits on OOM so the orchestrator restarts it | `Dockerfile` |
+
+Docker Desktop (Windows/macOS) ignores `enable_ip_masquerade: false`, so locally
+the database and web containers can still reach the internet; on Linux (and in
+CI) they cannot.
 
 ## Health checks
 
