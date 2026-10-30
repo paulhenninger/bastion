@@ -42,6 +42,7 @@ secrets.
 | `ADMIN_REQUIRES_MFA` | `true` | Admin API requires a session signed in with two factors. |
 | `AUDIT_RETENTION_DAYS` | `180` | Security events older than this are purged (they contain IPs and emails). |
 | `MAX_REQUEST_BYTES` | `65536` | Largest request body the API will read. |
+| `ALLOW_DEVELOPMENT_SETTINGS` | `false` | When `APP_BASE_URL` names a host other than this machine, the app refuses to start on development settings: an `http://` base URL, an empty or published database password, or `JWT_SECRET` equal to `DATA_ENCRYPTION_KEY`. `true` skips that check — for trying the app over a private network only, **never** on a deployment. |
 
 ## Passwords
 
@@ -76,8 +77,10 @@ secrets.
 | Variable | Default | Description |
 |---|---|---|
 | `DB_HOST` / `DB_PORT` / `DB_NAME` | `localhost` / `3306` / `bastion` | MySQL 9.7 LTS (8.4 LTS also works). |
-| `DB_USER` / `DB_PASS` | `bastion` / `bastion` | Use a dedicated user with rights on this schema only. |
-| `DB_PARAMS` | — | Appended to the JDBC URL. Production: `&sslMode=VERIFY_IDENTITY`. |
+| `DB_USER` / `DB_PASS` | `bastion` / `bastion` | The login the app runs as. Give it `SELECT, INSERT, UPDATE, DELETE` on this schema and nothing else — [`db/roles.sql`](../db/roles.sql) creates `bastion_app` that way (`.env.example` uses it). |
+| `SPRING_FLYWAY_USER` / `SPRING_FLYWAY_PASSWORD` | the `DB_` login | A separate login for migrations at startup, with DDL rights on this schema only (`bastion_owner` in `db/roles.sql`). Its connection is not pooled and closes after migrating. Unset, migrations run as `DB_USER`, which then needs DDL rights. |
+| `DB_PARAMS` | — | Appended to the JDBC URL. Production: `&sslMode=VERIFY_IDENTITY`. (Compose: `&sslMode=REQUIRED` — its database refuses unencrypted connections.) |
+| `DB_ADMIN_PASSWORD` | `bastion` | Compose only: the MySQL root password. Root can sign in only from inside the database container; the app never uses it. |
 | `DB_POOL_SIZE` | `20` | Hikari pool size. |
 
 ## Mail

@@ -1,6 +1,6 @@
 version: 2
 
-# Security updates only: open-pull-requests-limit 0 turns off the weekly
+# Security updates only (except Docker images, at the end): open-pull-requests-limit 0 turns off the weekly
 # version-update PRs (and the CI minutes each one costs); Dependabot still
 # raises a PR for a vulnerable dependency, using the groups and ignores below.
 updates:
@@ -37,39 +37,39 @@ updates:
       actions:
         patterns: ["*"]
 
-  # Base images: eclipse-temurin (backend build + runtime). Majors are moved by
-  # hand: Java stays on an LTS line (25 now, 29 next), never 26-28.
+  # Base images are pinned to a digest, and Docker images get no security
+  # advisories, so version updates are ON for them (unlike everything above):
+  # it's the only way the pins move. One grouped PR per directory, which the
+  # Security workflow scans and smoke-tests. Majors are moved by hand: Java and
+  # Node stay on LTS lines (Java 25 → 29; Node 26 → 28), and nginx on its stable
+  # branch (even minor; the next minor is always mainline).
   - package-ecosystem: docker
-    open-pull-requests-limit: 0
-    directory: /
+    open-pull-requests-limit: 2
+    directories: ["/", "/frontend"]
     schedule:
       interval: weekly
       day: monday
+    groups:
+      base-images:
+        patterns: ["*"]
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      - dependency-name: "nginxinc/nginx-unprivileged"
+        update-types: ["version-update:semver-minor"]
 
-  # Base images: node (SPA build) + nginx (SPA runtime). Node stays on an LTS
-  # (even) major, moved by hand.
-  - package-ecosystem: docker
-    open-pull-requests-limit: 0
-    directory: /frontend
-    schedule:
-      interval: weekly
-      day: monday
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
-
-  # Compose images: MySQL stays on its LTS line (9.7). Versions after 9.7 are
-  # dated Innovation releases (26.x) supported only until the next one; move to
-  # the next LTS by hand.
+  # Compose images (MySQL, Mailpit). MySQL stays on its LTS line (9.7): later
+  # versions are dated Innovation releases (26.x) supported only until the
+  # next. Move to the next LTS by hand.
   - package-ecosystem: docker-compose
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 2
     directory: /
     schedule:
       interval: weekly
       day: monday
+    groups:
+      compose-images:
+        patterns: ["*"]
     ignore:
       - dependency-name: "mysql"
         versions: [">= 10"]

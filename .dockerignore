@@ -1,6 +1,10 @@
 .git
 .gradle
+.idea
 build
 frontend
+node_modules
 *.log
 .env
+.env.*
+!.env.example

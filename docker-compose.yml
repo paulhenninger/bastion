@@ -1,44 +1,144 @@
-# Dev stack: MySQL + Mailpit always; add the app + web images with
-#   docker compose --profile full up -d --build
-# For day-to-day development run only the databases here and use
-# `./gradlew bootRun` + `npm run dev` for hot reload.
+# Dev stack. MySQL (with its two least-privilege logins) and Mailpit always; add
+# the app and web images, built from the production Dockerfiles, with
+#   docker compose --profile full up -d --build      →  http://localhost:8081
+# For day-to-day development run only the default services here and use
+# `./gradlew bootRun` + `npm run dev` for hot reload (see README.md).
 #
-# This file is for development. For production see docs/operations.md.
+# Every container runs the way production should: as an ordinary user, on a
+# read-only filesystem, with every Linux capability dropped, no way to gain
+# more, and capped memory and process counts. Each can reach only what it needs:
+#
+#   browser ──▶ web ──(api)──▶ app ──(backend)──▶ db
+#                               ├──(mail)──▶ mailpit
+#                               └──(outbound)──▶ internet: breached-password
+#                                                check, Turnstile, MX lookups
+#
+# The web server, the database and Mailpit cannot open a connection to the
+# internet, and the web server cannot reach the database at all. Published ports
+# are bound to this computer only.
+#
+# The passwords below are development defaults, readable by anyone with this
+# file. The app refuses to start with them once APP_BASE_URL names another host
+# (DeploymentSafetyCheck). For production see docs/operations.md.
+
+# What every container gets: nothing written outside /tmp (memory only) and its
+# data volume, no Linux capabilities, no privilege escalation (setuid included),
+# and rotated logs (they hold email and IP addresses).
+x-hardened: &hardened
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  logging:
+    driver: local
+    options:
+      max-size: 10m
+      max-file: "5"
 
 services:
-  mysql:
-    image: mysql:9.7.4   # the current LTS line
+  db:
+    <<: *hardened
+    # The current LTS line. After 9.7, MySQL versions are dated Innovation
+    # releases (26.x) each supported only until the next; Dependabot is told to
+    # stay on 9.7 and CI checks this matches MySqlMigrationTest.
+    image: mysql:9.7.4@sha256:86b390ef642f89a0157d6215dee33ddc928b8b0ecab173117f56f6c40cb24eab
+    # Runs as the mysql user from the start, so it needs no capability to switch.
+    user: mysql
+    command:
+      - --character-set-server=utf8mb4
+      # Every connection over the network is encrypted (with the certificate MySQL
+      # creates on first start), accounts are matched by address and never by a
+      # DNS name, the server reads no file a client names, and the X protocol port
+      # is closed.
+      - --require-secure-transport=ON
+      - --skip-name-resolve
+      - --local-infile=OFF
+      - --mysqlx=OFF
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS:-bastion}
       MYSQL_DATABASE: ${DB_NAME:-bastion}
-      MYSQL_USER: ${DB_USER:-bastion}
-      MYSQL_PASSWORD: ${DB_PASS:-bastion}
+      # The administrator exists only for connections from inside this container
+      # (and db-roles, through the shared socket): nothing on the network can sign
+      # in as root, even with the password.
+      MYSQL_ROOT_PASSWORD: ${DB_ADMIN_PASSWORD:-bastion}
+      MYSQL_ROOT_HOST: localhost
+    networks: [backend, db-ingress]
     ports:
-      - "127.0.0.1:3306:3306"   # loopback only: never expose a dev database
+      # For an app run outside Docker (bootRun). Only the two app logins can sign
+      # in this way; for the administrator: docker compose exec db mysql -uroot -p
+      - "127.0.0.1:${DB_PORT:-3306}:3306"
     volumes:
       - mysql-data:/var/lib/mysql
+      - mysql-socket:/var/run/mysqld
+    tmpfs:
+      - /tmp:size=64m
+    mem_limit: 768m
+    pids_limit: 256
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      # Over TCP, which MySQL opens only once first-start initialisation is done.
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
       interval: 5s
       timeout: 3s
-      retries: 20
+      retries: 30
+      start_period: 30s
+
+  # Creates or repairs the app's two logins (db/roles.sql), then exits: the owner
+  # that runs migrations, and the app login that can only read and write rows.
+  # Signs in as root over the socket that only it and the database share.
+  db-roles:
+    <<: *hardened
+    image: mysql:9.7.4@sha256:86b390ef642f89a0157d6215dee33ddc928b8b0ecab173117f56f6c40cb24eab
+    user: mysql
+    network_mode: none
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_NAME: ${DB_NAME:-bastion}
+      ADMIN_PASSWORD: ${DB_ADMIN_PASSWORD:-bastion}
+      OWNER_PASSWORD: ${SPRING_FLYWAY_PASSWORD:-bastion-owner-local}
+      APP_PASSWORD: ${DB_PASS:-bastion-app-local}
+    volumes:
+      - mysql-socket:/var/run/mysqld
+      - ./db/roles.sql:/bastion/roles.sql:ro
+      - ./db/apply-roles.sh:/bastion/apply-roles.sh:ro
+    entrypoint: ["sh", "/bastion/apply-roles.sh"]
+    mem_limit: 128m
+    pids_limit: 16
 
   # Local mail catcher — every email the app sends lands in the web UI at
   # http://localhost:8025. Nothing leaves the machine.
   mailpit:
-    image: axllent/mailpit:v1.31.6
+    <<: *hardened
+    image: axllent/mailpit:v1.32.0@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498
+    user: "65534:65534"
+    networks: [mail, mail-ingress]
     ports:
-      - "127.0.0.1:1025:1025"
-      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+    tmpfs:
+      - /tmp:size=64m
+    mem_limit: 128m
+    pids_limit: 64
 
   app:
+    <<: *hardened
     profiles: ["full"]
     build: .
+    image: ${BASTION_APP_IMAGE:-bastion-app:local}
+    depends_on:
+      db-roles:
+        condition: service_completed_successfully
+    # No API port published: only the web server reaches it.
+    networks: [api, backend, mail, outbound]
     environment:
-      DB_HOST: mysql
+      DB_HOST: db
       DB_NAME: ${DB_NAME:-bastion}
-      DB_USER: ${DB_USER:-bastion}
-      DB_PASS: ${DB_PASS:-bastion}
+      # Reads and writes rows, nothing else. Migrations run as the owner login,
+      # at startup only, over a connection that is closed straight after.
+      DB_USER: bastion_app
+      DB_PASS: ${DB_PASS:-bastion-app-local}
+      SPRING_FLYWAY_USER: bastion_owner
+      SPRING_FLYWAY_PASSWORD: ${SPRING_FLYWAY_PASSWORD:-bastion-owner-local}
+      DB_PARAMS: "&sslMode=REQUIRED"
       MAIL_HOST: mailpit
       MAIL_PORT: 1025
       JWT_SECRET: "${JWT_SECRET:?Set JWT_SECRET in .env (openssl rand -base64 32)}"
@@ -52,19 +152,58 @@ services:
       # Mailpit's fake domains have no MX records.
       SIGNUP_CHECK_MX: ${SIGNUP_CHECK_MX:-false}
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
+      ALLOW_DEVELOPMENT_SETTINGS: ${ALLOW_DEVELOPMENT_SETTINGS:-false}
+      JAVA_TOOL_OPTIONS: -Xmx384m
     ports:
-      - "127.0.0.1:9091:9091"   # management (health, Prometheus) — loopback only
-    depends_on:
-      mysql:
-        condition: service_healthy
+      - "127.0.0.1:${MANAGEMENT_HOST_PORT:-9091}:9091"   # management (health, Prometheus) — loopback only
+    tmpfs:
+      - /tmp:size=64m
+    mem_limit: 768m
+    pids_limit: 512
 
   web:
+    <<: *hardened
     profiles: ["full"]
     build: ./frontend
-    ports:
-      - "127.0.0.1:8081:8080"
+    image: ${BASTION_WEB_IMAGE:-bastion-web:local}
     depends_on:
-      - app
+      app:
+        condition: service_healthy
+        # nginx resolves "app" once, at start: restart it when app is replaced.
+        restart: true
+    networks: [api, web-ingress]
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8081}:8080"
+    tmpfs:
+      - /tmp:size=16m
+    mem_limit: 64m
+    pids_limit: 64
+
+networks:
+  # web ↔ app
+  api:
+    internal: true
+  # app ↔ db
+  backend:
+    internal: true
+  # app ↔ mailpit
+  mail:
+    internal: true
+  # The app's way out (breached-password check, Turnstile, MX) and its
+  # loopback-published management port.
+  outbound: {}
+  # These carry only published ports in. Docker needs a gateway to publish a
+  # port; with address translation off, nothing inside can use it to get out.
+  web-ingress:
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+  db-ingress:
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+  mail-ingress:
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
 
 volumes:
   mysql-data:
+  mysql-socket:

@@ -1,0 +1,97 @@
+name: Security
+
+# Supply chain and containers, on every PR, on main, and daily (new advisories
+# land against code that hasn't changed):
+#   secrets  gitleaks over the whole history (reviewed test values in .gitleaks.toml)
+#   images   builds both images, fails on any fixable HIGH/CRITICAL vulnerability in
+#            the OS packages or the backend's jars (Trivy), and on the npm lockfile
+#            (bundled into static files, so invisible in the image)
+#   stack    runs docker-compose.yml on those images and proves the hardening holds:
+#            scripts/verify-stack.sh (headers, actuator, network reachability, DB
+#            logins and TLS, read-only / no-capability containers)
+# Reviewed exceptions live in .trivyignore, each with an expiry.
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # Scanners run from their own images, pinned by digest; no third-party action
+  # runs here (trivy-action's tags were hijacked in March 2026).
+  TRIVY: aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
+  GITLEAKS: zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+
+jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # every commit: a secret deleted later is still in the history
+      - name: Scan the history for secrets
+        # --redact: a finding names the file and rule, never the value.
+        run: >-
+          docker run --rm -v "$PWD:/repo" "$GITLEAKS"
+          git /repo --config /repo/.gitleaks.toml --no-banner --redact --exit-code 1
+
+  images-and-stack:
+    runs-on: ubuntu-latest
+    env:
+      BASTION_APP_IMAGE: bastion-app:ci
+      BASTION_WEB_IMAGE: bastion-web:ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build both images
+        # --pull: judge this week's base-image fixes, not a cached layer's.
+        run: docker compose --profile full build --pull
+
+      - name: Scan the images and the npm lockfile
+        run: |
+          set -u
+          status=0
+          scan() { docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/src:ro" \
+                     -v trivy-cache:/root/.cache/trivy "$TRIVY" "$@" --quiet --scanners vuln \
+                     --ignore-unfixed --severity HIGH,CRITICAL --ignorefile /src/.trivyignore --exit-code 1 || status=1; }
+          for image in "$BASTION_APP_IMAGE" "$BASTION_WEB_IMAGE"; do
+            echo "::group::$image"; scan image "$image"; echo "::endgroup::"
+          done
+          echo "::group::frontend/package-lock.json"; scan fs /src/frontend/package-lock.json; echo "::endgroup::"
+          [ "$status" -eq 0 ] || { echo "::error::a fixable HIGH or CRITICAL vulnerability (above)"; exit 1; }
+
+      - name: Start the hardened stack
+        run: |
+          {
+            echo "JWT_SECRET=$(openssl rand -base64 32)"
+            echo "DATA_ENCRYPTION_KEY=$(openssl rand -base64 32)"
+            echo "APP_BASE_URL=http://localhost:8081"
+          } > .env
+          if ! docker compose --profile full up -d --no-build --wait --wait-timeout 300; then
+            docker compose --profile full ps -a
+            docker compose --profile full logs --tail 200
+            exit 1
+          fi
+
+      - name: Verify the hardening holds
+        run: sh scripts/verify-stack.sh
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose --profile full logs --tail 200 || true
+
+      - name: Tear down
+        if: always()
+        run: docker compose --profile full down -v >/dev/null 2>&1 || true

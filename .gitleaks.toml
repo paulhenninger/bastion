@@ -1,0 +1,25 @@
+# Settings for gitleaks, the secret scan CI runs over the whole git history
+# (.github/workflows/security.yml).
+#
+# gitleaks' own rules apply. Below are the only values let through: made-up keys
+# for tests, printed in the repository on purpose. Each is matched exactly, so a
+# real key committed anywhere — tests included — still fails the scan. Locally:
+#   docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1 git /repo --config /repo/.gitleaks.toml --redact
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Made-up keys and passwords for tests"
+regexTarget = "secret"
+regexes = [
+  # application-test.yml and the unit tests: the test JWT secret and encryption keys
+  # (and what they decode to: gitleaks also scans decoded base64).
+  '''^dGVzdC1zZWNyZXQtbXVzdC1iZS0yNTYtYml0cy1sb25nISE=$''',
+  '''^MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=$''',
+  '''^ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=$''',
+  '''^0123456789abcdef0123456789abcdef$''',
+  '''^fedcba9876543210fedcba9876543210$''',
+  # AuthFlowIntegrationTest: the password an attacker "knows" in the pre-hijacking test.
+  '''^attacker-knows-this-1$''',
+]

@@ -81,6 +81,10 @@ app:
     admin-requires-mfa: ${ADMIN_REQUIRES_MFA:true}
     audit-retention-days: ${AUDIT_RETENTION_DAYS:180}
     max-request-bytes: ${MAX_REQUEST_BYTES:65536}
+    # A base URL naming another host refuses development settings (http, the
+    # published database passwords, a shared key) — see DeploymentSafetyCheck.
+    # true skips that, for a private-network trial only. Never in production.
+    allow-development-settings: ${ALLOW_DEVELOPMENT_SETTINGS:false}
   passwords:
     min-length: ${PASSWORD_MIN_LENGTH:12}
     max-length: ${PASSWORD_MAX_LENGTH:128}
