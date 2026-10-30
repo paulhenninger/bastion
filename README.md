@@ -79,7 +79,7 @@ administration, audit logging and monitoring.
 
 ## Quickstart
 
-Prerequisites: Docker, a JDK is *not* needed (Gradle downloads Java 25), Node 24.
+Prerequisites: Docker, a JDK is *not* needed (Gradle downloads Java 25), Node 26 LTS.
 
 ```bash
 # 1. Secrets

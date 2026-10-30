@@ -75,7 +75,7 @@ secrets.
 
 | Variable | Default | Description |
 |---|---|---|
-| `DB_HOST` / `DB_PORT` / `DB_NAME` | `localhost` / `3306` / `bastion` | MySQL 8.4+. |
+| `DB_HOST` / `DB_PORT` / `DB_NAME` | `localhost` / `3306` / `bastion` | MySQL 9.7 LTS (8.4 LTS also works). |
 | `DB_USER` / `DB_PASS` | `bastion` / `bastion` | Use a dedicated user with rights on this schema only. |
 | `DB_PARAMS` | — | Appended to the JDBC URL. Production: `&sslMode=VERIFY_IDENTITY`. |
 | `DB_POOL_SIZE` | `20` | Hikari pool size. |

@@ -53,7 +53,7 @@ class MySqlMigrationTest {
 
     @Container
     @ServiceConnection
-    static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4").withCommand("--character-set-server=utf8mb4");
+    static final MySQLContainer MYSQL = new MySQLContainer("mysql:9.7.4").withCommand("--character-set-server=utf8mb4");
 
     static {
         // Before Spring starts (and migrates to latest): build a 1.x database with a live

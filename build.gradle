@@ -1,6 +1,6 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '4.1.1'
+    id 'org.springframework.boot' version '4.1.2'
     id 'io.spring.dependency-management' version '1.1.7'
     // Static analysis on the compiled bytecode, with find-sec-bugs for the
     // security rules. Advisory: it reports in CI and never fails the build.
@@ -8,7 +8,7 @@ plugins {
 }
 
 group = 'dev.bastion'
-version = '2.0.1'
+version = '2.1.0'
 
 java {
     toolchain {
@@ -63,7 +63,22 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+    exclude '**/StructuredLoggingTest*'
 }
+
+// The JSON-log test needs a JVM of its own. Logging is configured once per JVM,
+// and since Boot 4.1.2 a later test context asking for another format no longer
+// re-initializes it, so in the shared JVM the test would see whichever format
+// the first context chose. Production starts one context per JVM, as here.
+def structuredLoggingTest = tasks.register('structuredLoggingTest', Test) {
+    description = 'Runs StructuredLoggingTest in a fresh JVM.'
+    group = 'verification'
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/StructuredLoggingTest*'
+}
+tasks.named('check') { dependsOn structuredLoggingTest }
 
 tasks.withType(JavaCompile).configureEach {
     options.compilerArgs << '-Xlint:deprecation'

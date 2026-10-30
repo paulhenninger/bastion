@@ -44,7 +44,7 @@ Internet ──TLS──▶ edge proxy / load balancer  (HSTS, resets X-Forwarde
                  app (Spring Boot, :8080)   ── :9091 management (private)
                      │
                      ▼
-                 MySQL 8.4 (TLS)            SMTP relay (STARTTLS)
+                 MySQL 9.7 LTS (TLS)        SMTP relay (STARTTLS)
 ```
 
 Both containers run as non-root users. The app image needs no write access to

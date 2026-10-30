@@ -19,23 +19,61 @@ concurrency:
 permissions:
   contents: read
 
+# One place for the runtime versions CI tests. The "versions agree" step fails
+# the build if build.gradle, a Dockerfile or docker-compose.yml drifts from them,
+# so CI never tests one runtime while the image ships another.
+#   Java 25:  the current LTS (next: 29). Stay on LTS lines; non-LTS JDKs lose fixes after 6 months.
+#   Node 26:  Active LTS since 2026-10-28.
+#   MySQL 9.7: the current LTS (8.4 is the previous one; 26.x are short-lived Innovation releases).
+env:
+  JAVA_VERSION: "25"
+  NODE_VERSION: "26"
+  MYSQL_VERSION: "9.7"
+
 jobs:
   backend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      # Every third-party action is pinned to a commit, not a tag: a re-pointed
+      # tag (as happened to trivy-action in March 2026) can't change what runs.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Runtime versions agree
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          gradle=$(sed -n 's/.*JavaLanguageVersion\.of(\([0-9]*\)).*/\1/p' build.gradle)
+          docker=$(sed -n 's/^FROM eclipse-temurin:\([0-9]*\)[^ ]*.*/\1/p' Dockerfile | sort -u)
+          node=$(sed -n 's/^FROM node:\([0-9]*\)[^ ]*.*/\1/p' frontend/Dockerfile)
+          mysql=$(grep -ho 'mysql:[0-9]*\.[0-9]*' docker-compose.yml src/test/java/dev/bastion/MySqlMigrationTest.java | sed 's/mysql://' | sort -u)
+          echo "java: gradle=$gradle docker=$docker  node: $node  mysql: $mysql"
+          [ "$gradle" = "$JAVA_VERSION" ] || fail "build.gradle targets Java $gradle, CI tests $JAVA_VERSION"
+          [ "$docker" = "$JAVA_VERSION" ] || fail "Dockerfile uses Java '$docker', CI tests $JAVA_VERSION"
+          [ "$node" = "$NODE_VERSION" ] || fail "frontend/Dockerfile builds on Node $node, CI tests $NODE_VERSION"
+          [ "$mysql" = "$MYSQL_VERSION" ] || fail "MySQL versions '$mysql' differ from $MYSQL_VERSION (compose and MySqlMigrationTest must match)"
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
-          java-version: '25'
-      - uses: gradle/actions/setup-gradle@v6
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
       # `build` runs every test — including MySqlMigrationTest, which needs the
       # Docker that ubuntu-latest provides — and SpotBugs + find-sec-bugs.
       - name: Build, test and analyse
         run: ./gradlew build --console=plain
+
+      # The real-MySQL test is skipped without Docker. Skipped in CI would mean
+      # green without the migrations ever having run, so insist that it ran.
+      - name: The MySQL migration test ran
+        run: |
+          f=build/test-results/test/TEST-dev.bastion.MySqlMigrationTest.xml
+          [ -f "$f" ] || { echo "::error::$f missing: the MySQL migration test did not run"; exit 1; }
+          grep -q 'skipped="0"' "$f" || { echo "::error::the MySQL migration test was skipped"; exit 1; }
+
       - name: Upload SpotBugs report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: spotbugs
           path: build/reports/spotbugs/
@@ -46,10 +84,12 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: '24'
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci --ignore-scripts
@@ -64,7 +104,9 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/dependency-review-action@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
