@@ -1,7 +1,7 @@
 {
   "name": "bastion-frontend",
   "private": true,
-  "version": "2.0.1",
+  "version": "2.1.0",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -12,15 +12,15 @@
   },
   "dependencies": {
     "qrcode": "1.5.4",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
-    "react-router-dom": "^7.18.3"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.5"
   },
   "devDependencies": {
     "@types/qrcode": "1.5.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.1.1",
+    "@vitejs/plugin-react": "^6.1.2",
     "typescript": "~7.0.2",
     "vite": "^8.3.5"
   }

@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.1.0 — 2026-10-30
+
+### Runtime versions (all on current long-term-support lines)
+
+- **MySQL 9.7 LTS** (was 8.4) in Compose and in the real-database migration
+  test. An existing 8.4 data volume upgrades in place on first start (LTS → next
+  LTS is a supported path); it cannot be downgraded afterwards, so back it up
+  first.
+- **Node 26 LTS** for the SPA build in CI as well as the image (CI was on 24).
+- Spring Boot 4.1.2, Gradle 9.8.2 (wrapper now verifies the distribution's
+  SHA-256), React 19.3.1, React Router 7.18.5, Vite 8.3.5. Java stays on 25 LTS.
+- CI fails if `build.gradle`, the Dockerfiles, Compose and the MySQL test
+  disagree on a runtime version, and if the real-MySQL test was skipped.
+- Every GitHub Action is pinned to a commit SHA; checkouts no longer keep the
+  token. Dependabot never proposes a non-LTS Java, Node or MySQL major.
+
 ## 2.0.1 — 2026-10-21
 
 Fixes from a full black-box security and usability verification of 2.0.0

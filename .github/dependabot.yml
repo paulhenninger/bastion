@@ -37,18 +37,39 @@ updates:
       actions:
         patterns: ["*"]
 
-  # Base images: eclipse-temurin (backend build + runtime)
+  # Base images: eclipse-temurin (backend build + runtime). Majors are moved by
+  # hand: Java stays on an LTS line (25 now, 29 next), never 26-28.
   - package-ecosystem: docker
     open-pull-requests-limit: 0
     directory: /
     schedule:
       interval: weekly
       day: monday
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
-  # Base images: node (SPA build) + nginx (SPA runtime)
+  # Base images: node (SPA build) + nginx (SPA runtime). Node stays on an LTS
+  # (even) major, moved by hand.
   - package-ecosystem: docker
     open-pull-requests-limit: 0
     directory: /frontend
     schedule:
       interval: weekly
       day: monday
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # Compose images: MySQL stays on its LTS line (9.7). Versions after 9.7 are
+  # dated Innovation releases (26.x) supported only until the next one; move to
+  # the next LTS by hand.
+  - package-ecosystem: docker-compose
+    open-pull-requests-limit: 0
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    ignore:
+      - dependency-name: "mysql"
+        versions: [">= 10"]
