@@ -43,7 +43,8 @@ backups and scaling.
       `PASSWORD_MIN_LENGTH=15` if most users won't use MFA.
 - [ ] Single instance, or rate limiting moved to a shared store (see *Scaling*).
 - [ ] GitHub private vulnerability reporting enabled on your fork, and
-      Dependabot alerts on.
+      Dependabot alerts on (the Java dependencies reach them only through
+      `dependency-submission.yml`: check the dependency graph lists Maven packages).
 
 ## Deployment shape
 

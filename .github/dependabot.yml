@@ -4,7 +4,9 @@ version: 2
 # version-update PRs (and the CI minutes each one costs); Dependabot still
 # raises a PR for a vulnerable dependency, using the groups and ignores below.
 updates:
-  # Backend — Spring Boot, Spring Security, JJWT, Flyway, MySQL driver
+  # Backend — Spring Boot, Spring Security, JJWT, Flyway, MySQL driver. GitHub
+  # cannot read a Gradle build by itself: these alerts and security PRs exist
+  # only because dependency-submission.yml submits the resolved graph.
   - package-ecosystem: gradle
     open-pull-requests-limit: 0
     directory: /

@@ -114,7 +114,7 @@ without `DATA_ENCRYPTION_KEY`, which is kept outside the database.
 | Lateral movement after an app compromise | Segmented networks (web can't reach the DB; only the app reaches the internet); the app's DB login can only read/write rows, never DDL or other schemas; DB root only from inside its container; DB TLS required | `scripts/verify-stack.sh` (CI) |
 | Deploying on development defaults | `DeploymentSafetyCheck` refuses `http://`, published DB passwords and a shared key once `APP_BASE_URL` names a real host | `DeploymentSafetyCheckTest` |
 | Secrets in query strings reaching logs | Emailed tokens live in the URL fragment; nginx logs paths without query strings | `scripts/verify-stack.sh` (CI) |
-| Vulnerable dependencies | Dependabot (digest-pinned images included), `dependency-review` on PRs, `npm audit`, Trivy on both images and the npm lockfile (daily), CodeQL, SpotBugs + find-sec-bugs | CI |
+| Vulnerable dependencies | Dependabot (Java dependencies via the submitted Gradle graph, digest-pinned images included), `dependency-review` on PRs, `npm audit`, Trivy on both images and the npm lockfile (daily), CodeQL, SpotBugs + find-sec-bugs | CI |
 | Supply-chain tampering | Base images pinned by digest, GitHub Actions pinned by commit SHA, Gradle distribution checksum-verified, scanners run from digest-pinned images; gitleaks over all history | CI |
 | Schema drift | Flyway migrations run on real MySQL and validated against the entities in CI | `MySqlMigrationTest` |
 | Data loss on DB theft | See *Assets* | `MfaIntegrationTest.totpSecretsAreEncryptedAtRest`, `SecurityPrimitivesTest.cipher…` |

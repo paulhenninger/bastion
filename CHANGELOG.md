@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Dependabot now covers the Java dependencies.** GitHub cannot parse a
+  Gradle build, so the dependency graph held only npm packages and no backend
+  advisory could ever raise an alert. `dependency-submission.yml` submits the
+  resolved runtime classpath from `main` (and weekly).
 - **Java 25.0.5** (Temurin, the October 2026 security update) in both stages
   of the backend image (was 25.0.4.1).
 

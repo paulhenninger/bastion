@@ -86,7 +86,7 @@ administration, audit logging and monitoring.
   on real MySQL (Testcontainers)
 - CI: tests, SpotBugs + find-sec-bugs, CodeQL, dependency review, `npm audit`,
   Trivy, gitleaks, a hardened-stack smoke test,
-  Dependabot
+  Dependabot (with the Gradle graph submitted, so it covers the Java side too)
 
 ## Quickstart
 
