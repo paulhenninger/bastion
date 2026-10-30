@@ -21,7 +21,9 @@ backups and scaling.
 - [ ] **Database**: TLS (`DB_PARAMS=&sslMode=VERIFY_IDENTITY`), encrypted
       backups, and two logins from [`db/roles.sql`](../db/roles.sql): the app
       runs as `bastion_app` (rows only) and migrates as `bastion_owner`
-      (`SPRING_FLYWAY_USER`/`SPRING_FLYWAY_PASSWORD`). Never run the app as root.
+      (`SPRING_FLYWAY_USER`/`SPRING_FLYWAY_PASSWORD`). Never run the app as root:
+      it refuses to start if its login holds any right beyond reading and writing
+      rows (`DatabaseLoginCheck`).
 - [ ] **No development settings.** The app refuses to start when `APP_BASE_URL`
       names a real host but the URL is `http://`, a database password is one of the
       published defaults, or the two keys are equal (`DeploymentSafetyCheck`).

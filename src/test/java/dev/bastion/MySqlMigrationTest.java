@@ -1,6 +1,7 @@
 package dev.bastion;
 
 import dev.bastion.auth.AuthController;
+import dev.bastion.config.DatabaseLoginCheckProbe;
 import dev.bastion.email.EmailService;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.MethodOrderer;
@@ -13,6 +14,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -22,6 +24,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.DriverManager;
 import java.util.Map;
 
@@ -35,7 +39,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * The real Flyway migrations on real MySQL — the H2 suite can't run them. Proves that
  * a 1.x database upgrades with its users intact, that the schema matches the entities
- * exactly (Hibernate {@code validate}), and that the row-locking queries work on InnoDB.
+ * exactly (Hibernate {@code validate}), that the row-locking queries work on InnoDB, and
+ * that DatabaseLoginCheck reads a login's rights correctly.
  * Skipped when Docker isn't available; CI always has it.
  */
 @Testcontainers(disabledWithoutDocker = true)
@@ -156,5 +161,32 @@ class MySqlMigrationTest {
             }
         }
         assertThat(checked).isGreaterThanOrEqualTo(4);
+    }
+
+    /**
+     * DatabaseLoginCheck's query, on real MySQL: the container's own login (all rights
+     * on the database, as a single-login deployment would have) and root are refused,
+     * and the bastion_app login that db/roles.sql creates passes.
+     */
+    @Test
+    @Order(5)
+    void databaseLoginCheckTellsTheAppLoginFromPowerfulOnes() throws Exception {
+        assertThat(DatabaseLoginCheckProbe.problems(jdbc))
+                .singleElement().asString().contains("change this database's tables");
+        try (var root = DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
+             var statement = root.createStatement()) {
+            statement.execute("set @owner_password = 'owner-test-password', @app_password = 'app-test-password'");
+            String roles = Files.readString(Path.of("db/roles.sql")).replaceAll("(?m)^--.*$", "");
+            for (String sql : roles.split(";\\s*\\n")) {
+                if (!sql.isBlank()) {
+                    statement.execute(sql);
+                }
+            }
+            assertThat(DatabaseLoginCheckProbe.problems(new JdbcTemplate(
+                    new DriverManagerDataSource(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword()))))
+                    .anySatisfy(p -> assertThat(p).contains("whole server"));
+        }
+        assertThat(DatabaseLoginCheckProbe.problems(new JdbcTemplate(
+                new DriverManagerDataSource(MYSQL.getJdbcUrl(), "bastion_app", "app-test-password")))).isEmpty();
     }
 }
