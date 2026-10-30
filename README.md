@@ -81,7 +81,7 @@ administration, audit logging and monitoring.
   gitleaks, and a CI smoke test that proves all of the above on the running stack
 
 **Quality**
-- 80 backend tests: full flows through MockMvc, real WebAuthn ceremonies against
+- 83 backend tests: full flows through MockMvc, real WebAuthn ceremonies against
   an emulated authenticator, RFC 6238 test vectors, and the real Flyway migrations
   on real MySQL (Testcontainers)
 - CI: tests, SpotBugs + find-sec-bugs, CodeQL, dependency review, `npm audit`,

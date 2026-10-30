@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **A deployment refuses to run as a powerful database login**
+  (`DatabaseLoginCheck`). Once `APP_BASE_URL` names a real host, the app asks
+  MySQL what `DB_USER` may do and refuses to start if it holds a global
+  privilege, anything beyond SELECT/INSERT/UPDATE/DELETE on its database, the
+  right to grant, or an active role. CI already proved this for the Compose
+  stack; now a hand-configured deployment can't run as the owner or root.
+  **Upgrading:** a deployment on one login must apply `db/roles.sql` and set
+  `DB_USER=bastion_app` and `SPRING_FLYWAY_USER=bastion_owner` first.
 - **Dependabot now covers the Java dependencies.** GitHub cannot parse a
   Gradle build, so the dependency graph held only npm packages and no backend
   advisory could ever raise an alert. `dependency-submission.yml` submits the
