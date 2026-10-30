@@ -1,0 +1,50 @@
+name: Dependency submission
+
+# Dependabot can only raise an alert for a dependency GitHub knows about. For
+# npm it reads package-lock.json; for Gradle it reads nothing useful, so without
+# this workflow the dependency graph holds every npm package and no Java one at
+# all: Spring Boot, Spring Security, Tomcat, Jackson, JJWT, webauthn4j, Bouncy
+# Castle and the MySQL driver would never be checked against an advisory, and
+# with Dependabot set to security updates only (dependabot.yml), never updated.
+#
+# This resolves the real graph from the build and submits it, which is what
+# turns on Dependabot alerts and security-update PRs for the backend.
+#
+# Only from the default branch (the graph belongs to it; submitting from PR
+# branches would make alerts flap), when the build's dependency declarations
+# change. The weekly run re-submits in case a push run ever failed.
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - build.gradle
+      - settings.gradle
+      - gradle/**
+      - .github/workflows/dependency-submission.yml
+  schedule:
+    - cron: '41 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write # the Dependency Submission API requires it
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25"
+      # Runs the committed wrapper (checksum-verified distribution).
+      - uses: gradle/actions/dependency-submission@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        env:
+          # What ships in the image, and nothing else. Build-only tools (the
+          # SpotBugs engine) and test-only jars (Testcontainers, H2,
+          # webauthn4j-test) never reach production; alerts about them would be
+          # noise that trains people to ignore alerts. Trivy still scans the
+          # image's jars on every PR and daily (security.yml).
+          DEPENDENCY_GRAPH_INCLUDE_CONFIGURATIONS: runtimeClasspath

@@ -21,7 +21,9 @@ backups and scaling.
 - [ ] **Database**: TLS (`DB_PARAMS=&sslMode=VERIFY_IDENTITY`), encrypted
       backups, and two logins from [`db/roles.sql`](../db/roles.sql): the app
       runs as `bastion_app` (rows only) and migrates as `bastion_owner`
-      (`SPRING_FLYWAY_USER`/`SPRING_FLYWAY_PASSWORD`). Never run the app as root.
+      (`SPRING_FLYWAY_USER`/`SPRING_FLYWAY_PASSWORD`). Never run the app as root:
+      it refuses to start if its login holds any right beyond reading and writing
+      rows (`DatabaseLoginCheck`).
 - [ ] **No development settings.** The app refuses to start when `APP_BASE_URL`
       names a real host but the URL is `http://`, a database password is one of the
       published defaults, or the two keys are equal (`DeploymentSafetyCheck`).
@@ -43,7 +45,8 @@ backups and scaling.
       `PASSWORD_MIN_LENGTH=15` if most users won't use MFA.
 - [ ] Single instance, or rate limiting moved to a shared store (see *Scaling*).
 - [ ] GitHub private vulnerability reporting enabled on your fork, and
-      Dependabot alerts on.
+      Dependabot alerts on (the Java dependencies reach them only through
+      `dependency-submission.yml`: check the dependency graph lists Maven packages).
 
 ## Deployment shape
 

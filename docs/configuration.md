@@ -42,7 +42,7 @@ secrets.
 | `ADMIN_REQUIRES_MFA` | `true` | Admin API requires a session signed in with two factors. |
 | `AUDIT_RETENTION_DAYS` | `180` | Security events older than this are purged (they contain IPs and emails). |
 | `MAX_REQUEST_BYTES` | `65536` | Largest request body the API will read. |
-| `ALLOW_DEVELOPMENT_SETTINGS` | `false` | When `APP_BASE_URL` names a host other than this machine, the app refuses to start on development settings: an `http://` base URL, an empty or published database password, or `JWT_SECRET` equal to `DATA_ENCRYPTION_KEY`. `true` skips that check — for trying the app over a private network only, **never** on a deployment. |
+| `ALLOW_DEVELOPMENT_SETTINGS` | `false` | When `APP_BASE_URL` names a host other than this machine, the app refuses to start on development settings: an `http://` base URL, an empty or published database password, or `JWT_SECRET` equal to `DATA_ENCRYPTION_KEY`, or a database login (`DB_USER`) with any right beyond reading and writing rows. `true` skips these checks — for trying the app over a private network only, **never** on a deployment. |
 
 ## Passwords
 

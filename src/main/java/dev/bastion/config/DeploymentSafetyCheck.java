@@ -25,6 +25,9 @@ import java.util.Set;
  *   <li>the same key used as {@code JWT_SECRET} and {@code DATA_ENCRYPTION_KEY}.</li>
  * </ul>
  *
+ * <p>{@link DatabaseLoginCheck} adds the one check that needs the database: that the
+ * app's login can read and write rows and nothing more.
+ *
  * <p>{@code ALLOW_DEVELOPMENT_SETTINGS=true} skips the check, for trying the app from
  * another device on a private network. Never set it on a deployment.
  */
@@ -50,15 +53,20 @@ public class DeploymentSafetyCheck {
         }
     }
 
+    /** True when the app is reached on this machine only, where the development settings are fine. */
+    static boolean isLocal(String baseUrl) {
+        String host = URI.create(baseUrl.trim()).getHost();
+        return LOCAL_HOSTS.contains(host == null ? "" : host.toLowerCase(java.util.Locale.ROOT));
+    }
+
     /** What is unsafe about these settings for a deployment; empty when they are fine or the app is local. */
     static List<String> problems(String baseUrl, String jwtSecret, String encryptionKey,
                                  String dbPassword, String flywayPassword) {
         List<String> problems = new ArrayList<>();
-        URI uri = URI.create(baseUrl.trim());
-        String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(java.util.Locale.ROOT);
-        if (LOCAL_HOSTS.contains(host)) {
+        if (isLocal(baseUrl)) {
             return problems;
         }
+        URI uri = URI.create(baseUrl.trim());
         if (!"https".equalsIgnoreCase(uri.getScheme())) {
             problems.add("APP_BASE_URL must start with https:// (cookies are only Secure over https)");
         }
