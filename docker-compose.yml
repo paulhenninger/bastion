@@ -53,6 +53,9 @@ services:
       - --skip-name-resolve
       - --local-infile=OFF
       - --mysqlx=OFF
+      # Not the 'sha256_password is deprecated' warning: for an unknown user (the healthcheck's
+      # ping) MySQL fakes a login with a plugin drawn at random, so names can't be probed. No account uses it.
+      - --log-error-suppression-list=MY-013360
     environment:
       MYSQL_DATABASE: ${DB_NAME:-bastion}
       # The administrator exists only for connections from inside this container
