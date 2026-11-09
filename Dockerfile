@@ -26,7 +26,7 @@ RUN ./gradlew --no-daemon -q bootJar
 # Unpack into Spring Boot's layers: a code-only release ships a ~1 MB layer, not the whole jar.
 RUN java -Djarmode=tools -jar build/libs/bastion-*.jar extract --layers --launcher --destination /extracted
 
-FROM eclipse-temurin:25.0.5_8-jre-alpine@sha256:56f273059de6b13a6b49fe0ded691ed2d0399bbee76156a8f2d385f7524a3d43
+FROM eclipse-temurin:25.0.5_8-jre-alpine@sha256:e1898fd6a11fc965a994d8ace186fd3585aeb636cf8f05f47a723fcfee0b0918
 # Alpine security fixes published since the base image was built, then a
 # system user with no shell and no home. Nothing else is installed: the
 # healthcheck uses busybox wget, which Alpine has built in.
