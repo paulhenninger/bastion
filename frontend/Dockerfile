@@ -2,7 +2,7 @@
 #
 # Base images pinned to a version and digest (see the backend Dockerfile).
 # Node stays on an LTS line (26); CI fails if this and ci.yml disagree.
-FROM node:26.13.0-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS build
+FROM node:26.13.1-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS build
 WORKDIR /workspace
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts

@@ -12,7 +12,7 @@
 #   docker run --read-only --tmpfs /tmp --cap-drop ALL \
 #     --security-opt no-new-privileges --env-file .env bastion-app
 
-FROM eclipse-temurin:25.0.5_8-jdk@sha256:83f4a7fc27df94dcc7b8de04d14cbbba8da14406f921e966969c3b09000aa507 AS build
+FROM eclipse-temurin:25.0.5_8-jdk@sha256:b8705e936964c228dfce359e63dbf08f6c69cb380ed1d576b1f6b1064f15567d AS build
 WORKDIR /workspace
 COPY gradlew ./
 COPY gradle ./gradle
