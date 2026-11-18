@@ -21,7 +21,7 @@ import java.util.List;
  *
  * <p>The signature proves the token was issued here; it does not prove the session is
  * still wanted. So the session row and its user are re-read on every request (one
- * indexed query): a sign-out, "sign out other devices", password reset, admin lock or
+ * indexed query, one round trip): a sign-out, "sign out other devices", password reset, admin lock or
  * role change takes effect on the target's next call — not whenever their JWT expires.
  */
 @Component

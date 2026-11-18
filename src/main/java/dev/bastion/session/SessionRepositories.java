@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
@@ -47,7 +49,12 @@ interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long> {
 
 interface UserSessionRepository extends JpaRepository<UserSession, Long> {
 
-    /** The per-request check: the session and its user in one query. */
+    /**
+     * The per-request check: the session and its user in one query. SUPPORTS overrides
+     * Spring Data's default read-only transaction, so outside a transaction this runs in
+     * autocommit as a single round trip (see {@link SessionService#resolve}).
+     */
+    @Transactional(propagation = Propagation.SUPPORTS)
     @Query("select s from UserSession s join fetch s.user where s.publicId = :publicId")
     Optional<UserSession> findByPublicIdWithUser(@Param("publicId") String publicId);
 

@@ -130,6 +130,47 @@ class MySqlMigrationTest {
     }
 
     /**
+     * Every authenticated request re-checks its session, so that check's cost is paid on
+     * every call. It must be one statement on the wire — not wrapped in a read-only
+     * transaction, which on MySQL turns it into six (set read only, autocommit off,
+     * select, commit, autocommit on, set read write). Counted from the server's own log.
+     * Uses the account {@link #signupAndVerifyWorkOnMysql} created.
+     */
+    @Test
+    @Order(4)
+    void authenticatingARequestIsOneRoundTrip() throws Exception {
+        MvcResult login = mvc.perform(post("/api/v1/auth/login").contentType("application/json")
+                        .content("{\"email\":\"fresh@example.com\",\"password\":\"a-long-new-passphrase\"}"))
+                .andExpect(status().isOk()).andReturn();
+        String access = new tools.jackson.databind.json.JsonMapper()
+                .readTree(login.getResponse().getContentAsString()).get("accessToken").asString();
+        // A path with no handler: the auth filter is the only thing that reads the database.
+        var request = get("/api/v1/no-such-endpoint").header("Authorization", "Bearer " + access);
+        mvc.perform(request).andExpect(status().isNotFound()); // warm-up
+
+        try (var root = DriverManager.getConnection(MYSQL.getJdbcUrl(), "root", MYSQL.getPassword());
+             var statement = root.createStatement()) {
+            statement.execute("set global log_output = 'TABLE'");
+            statement.execute("truncate mysql.general_log");
+            statement.execute("set global general_log = 1");
+            try {
+                mvc.perform(request).andExpect(status().isNotFound());
+            } finally {
+                statement.execute("set global general_log = 0");
+            }
+            var sent = new java.util.ArrayList<String>();
+            try (var rows = statement.executeQuery("select argument from mysql.general_log "
+                    + "where thread_id <> connection_id() and command_type in ('Query', 'Execute') "
+                    + "order by event_time")) {
+                while (rows.next()) {
+                    sent.add(rows.getString(1));
+                }
+            }
+            assertThat(sent).singleElement().asString().startsWith("select").contains("from user_sessions");
+        }
+    }
+
+    /**
      * Hibernate's {@code validate} checks column types, not lengths, and the H2 suite
      * builds its schema from the entities — so an enum constant longer than its
      * migration's VARCHAR passes everything until it is first written on MySQL. 2.0.0
@@ -137,7 +178,7 @@ class MySqlMigrationTest {
      * codes couldn't sign anyone in. Every enum-valued column, every constant, checked.
      */
     @Test
-    @Order(4)
+    @Order(5)
     void everyEnumConstantFitsItsColumn() {
         int checked = 0;
         for (var entity : entityManagerFactory.getMetamodel().getEntities()) {
@@ -169,7 +210,7 @@ class MySqlMigrationTest {
      * and the bastion_app login that db/roles.sql creates passes.
      */
     @Test
-    @Order(5)
+    @Order(6)
     void databaseLoginCheckTellsTheAppLoginFromPowerfulOnes() throws Exception {
         assertThat(DatabaseLoginCheckProbe.problems(jdbc))
                 .singleElement().asString().contains("change this database's tables");
