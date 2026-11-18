@@ -215,9 +215,14 @@ public class SessionService {
     /**
      * The session an access token names, if it is still good: not revoked, not past
      * its absolute expiry, belonging to that user, whose account is verified and
-     * unlocked. One indexed query per request.
+     * unlocked. One indexed query — and one database round trip — per request.
+     *
+     * <p>Deliberately not {@code @Transactional}: a single read needs no transaction, and
+     * a read-only one costs five extra round trips on MySQL (set read only, autocommit
+     * off, commit, autocommit on, set read write) on every authenticated call. The join
+     * fetch loads the user eagerly, so nothing here touches a lazy association.
+     * {@code MySqlMigrationTest} holds this to one statement.
      */
-    @Transactional(readOnly = true)
     public Optional<AuthPrincipal> resolve(Long userId, String publicId) {
         Instant now = Instant.now();
         return sessions.findByPublicIdWithUser(publicId)
