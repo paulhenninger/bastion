@@ -12,7 +12,7 @@ RUN npm run build
 # nginx built to run as an ordinary user (uid 101) on port 8080, on its stable
 # branch (even minor: 1.30, 1.32 …); Dependabot proposes only patches here.
 # Alpine's security fixes are applied as root, the only step that is.
-FROM nginxinc/nginx-unprivileged:1.30.6-alpine@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03
+FROM nginx/nginx-unprivileged:1.30.8-alpine@sha256:637c35e46af7bc0dd3d3bcf7162e004e13ab3b370fde7cd416e2ac410b5a985a
 USER root
 RUN apk upgrade --no-cache
 USER 101

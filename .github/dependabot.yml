@@ -57,7 +57,7 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
-      - dependency-name: "nginxinc/nginx-unprivileged"
+      - dependency-name: "nginx/nginx-unprivileged"
         update-types: ["version-update:semver-minor"]
 
   # Compose images (MySQL, Mailpit). MySQL stays on its LTS line (9.7): later
