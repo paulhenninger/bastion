@@ -12,7 +12,7 @@
 #   docker run --read-only --tmpfs /tmp --cap-drop ALL \
 #     --security-opt no-new-privileges --env-file .env bastion-app
 
-FROM eclipse-temurin:25.0.5_8-jdk@sha256:b8705e936964c228dfce359e63dbf08f6c69cb380ed1d576b1f6b1064f15567d AS build
+FROM eclipse-temurin:25.0.5.1_2-jdk@sha256:ce2ef9d2d67a68de5e196d4de9d743327c44a10b57fe02ec39f572c652cacfd3 AS build
 WORKDIR /workspace
 COPY gradlew ./
 COPY gradle ./gradle
@@ -26,7 +26,7 @@ RUN ./gradlew --no-daemon -q bootJar
 # Unpack into Spring Boot's layers: a code-only release ships a ~1 MB layer, not the whole jar.
 RUN java -Djarmode=tools -jar build/libs/bastion-*.jar extract --layers --launcher --destination /extracted
 
-FROM eclipse-temurin:25.0.5_8-jre-alpine@sha256:e1898fd6a11fc965a994d8ace186fd3585aeb636cf8f05f47a723fcfee0b0918
+FROM eclipse-temurin:25.0.5.1_2-jre-alpine@sha256:69c2a26e9894016e274c880fa542956d005b3755f84db765145185e87405bd89
 # Alpine security fixes published since the base image was built, then a
 # system user with no shell and no home. Nothing else is installed: the
 # healthcheck uses busybox wget, which Alpine has built in.
